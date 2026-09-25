@@ -9,7 +9,15 @@ if (process.platform !== 'win32' || process.arch !== 'x64') {
 }
 
 function run(command, args, cwd = root) {
-  const result = spawnSync(command, args, { cwd, stdio: 'inherit', shell: process.platform === 'win32' })
+  const useWindowsShim = process.platform === 'win32' && command === 'pnpm'
+  const commandName = useWindowsShim ? (process.env.ComSpec ?? 'cmd.exe') : command
+  const commandArgs = useWindowsShim
+    ? ['/d', '/s', '/c', ['pnpm.cmd', ...args].map((arg) => {
+        if (!/^[\w./:-]+$/.test(arg)) throw new Error(`Unsupported Windows command argument: ${arg}`)
+        return arg
+      }).join(' ')]
+    : args
+  const result = spawnSync(commandName, commandArgs, { cwd, stdio: 'inherit' })
   if (result.status !== 0) process.exit(result.status ?? 1)
 }
 

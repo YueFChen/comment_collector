@@ -6,6 +6,10 @@
 
 /* ---------- 基础 ---------- */
 .cc {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 0;
+  padding-inline: var(--app-page-gutter, 24px);
   color: var(--app-ink);
   font-size: 14px;
 }

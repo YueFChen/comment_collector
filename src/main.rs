@@ -8,8 +8,7 @@ use wonderland_plugin_sdk::{
     HostClient, PluginError, PluginFailure, RequestTracker, serve,
 };
 use wonderland_comment_collector::{
-    ArchiveSummary, CommentArchive, CommentCollector, CommentQuery, ExportFormat, ExportOutcome,
-    PublicHttpClient,
+    CommentCollector, CommentQuery, ExportFormat, ExportOutcome, PublicHttpClient,
 };
 
 const CONTRACT: &str = include_str!("../package/contract.json");
