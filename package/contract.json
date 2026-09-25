@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "$defs": {
+    "empty": { "type": "object", "additionalProperties": false },
+    "levelId": { "type": "string", "pattern": "^[0-9]{1,20}$" },
+    "archive": { "type": "object", "required": ["schema_version", "level", "updated_at", "fetch_count", "last_pages", "comments"], "additionalProperties": true },
+    "summary": { "type": "object", "required": ["level_id", "level_name", "cover_url", "updated_at", "count"], "additionalProperties": true }
+  },
+  "methods": {
+    "archives": { "params": { "$ref": "#/$defs/empty" }, "result": { "type": "array", "items": { "$ref": "#/$defs/summary" } }, "timeoutMs": 10000 },
+    "archive": { "params": { "type": "object", "required": ["level_id"], "properties": { "level_id": { "$ref": "#/$defs/levelId" } }, "additionalProperties": false }, "result": { "oneOf": [{ "$ref": "#/$defs/archive" }, { "type": "null" }] }, "timeoutMs": 10000 },
+    "collect": { "params": { "type": "object", "required": ["query"], "properties": { "query": { "type": "object", "required": ["level_id"], "properties": { "level_id": { "$ref": "#/$defs/levelId" } }, "additionalProperties": false } }, "additionalProperties": false }, "result": { "$ref": "#/$defs/archive" }, "timeoutMs": 86400000 },
+    "export": { "params": { "type": "object", "required": ["level_id", "format"], "properties": { "level_id": { "$ref": "#/$defs/levelId" }, "format": { "enum": ["json", "csv", "excel"] } }, "additionalProperties": false }, "result": { "type": "object", "required": ["path", "format", "rows"], "additionalProperties": true }, "timeoutMs": 30000 },
+    "export_dir": { "params": { "$ref": "#/$defs/empty" }, "result": { "type": "string", "maxLength": 1024 }, "timeoutMs": 5000 },
+    "reveal_dir": { "params": { "$ref": "#/$defs/empty" }, "result": { "type": "object" }, "timeoutMs": 5000 }
+  },
+  "events": {
+    "collect.progress": { "payload": { "type": "object", "required": ["page", "fetched"], "properties": { "page": { "type": "integer", "minimum": 0 }, "fetched": { "type": "integer", "minimum": 0 } }, "additionalProperties": false } }
+  }
+}

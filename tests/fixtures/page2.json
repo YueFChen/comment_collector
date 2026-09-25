@@ -1,0 +1,29 @@
+{
+  "retcode": 0,
+  "message": "OK",
+  "data": {
+    "reply_list": [
+      {
+        "reply_id": "1004",
+        "floor_id": 3,
+        "content": "带,逗号与\"引号\"\n以及换行的内容",
+        "created_at": 1750000300,
+        "client_ip": "北京",
+        "is_recommend": true,
+        "is_owner": false,
+        "f_reply_id": "0",
+        "r_user": null,
+        "user_info": { "uid": "8004", "nickname": "旅行者丁" },
+        "reply_stat": { "like_count": 0, "reply_count": 0 }
+      },
+      {
+        "reply_id": "",
+        "floor_id": 4,
+        "content": "缺少 id 的脏数据应被跳过",
+        "created_at": 1750000400,
+        "user_info": { "uid": "8005", "nickname": "旅行者戊" }
+      }
+    ],
+    "cursor": { "next": "", "size": 20, "sort_type": "SORT_TYPE_HOT", "has_more": false }
+  }
+}

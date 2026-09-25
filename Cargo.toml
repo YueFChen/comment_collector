@@ -1,0 +1,58 @@
+[package]
+name = "wonderland-comment-collector"
+description = "评论采集器：匿名抓取奇域关卡的全量评论，本地留存并导出。"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[dependencies]
+# `#[instrument]` 展开成 `::tracing::...` 绝对路径。
+tracing.workspace = true
+tracing-subscriber.workspace = true
+async-trait = "0.1"
+base64 = "0.22"
+wonderland-plugin-sdk = { version = "0.1.0", path = "../../crates/plugin-sdk" }
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+# 导出用本地时间戳：chrono 已在 Tauri 的依赖树里，不额外引入新的下载量。
+chrono = "0.4"
+# Excel 导出（.xlsx）。纯 Rust，无 C 依赖。
+rust_xlsxwriter = "0.99"
+ts-rs = { workspace = true, optional = true }
+
+[features]
+bindings = ["dep:ts-rs"]
+
+[[example]]
+name = "generate_bindings"
+required-features = ["bindings"]
+
+[workspace]
+resolver = "3"
+members = [
+    "."
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.98"
+license = "Apache-2.0"
+publish = false
+
+[workspace.dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+ts-rs = { version = "12", features = ["serde-json-impl"] }
+# 日志门面：内核重新导出宏与 `instrument`，工作区不直连 tracing（ADR-002）。
+# `attributes` 是 `instrument` 的来源，显式列出以免被别处的 default-features = false 影响。
+tracing = { version = "0.1", features = ["attributes"] }
+# 日志实现：只有 crates/logging 使用，插件与其它 crate 不得依赖（ADR-002）。
+tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "ansi"] }
+tracing-appender = "0.2"
+# 输出层脱敏。
+regex = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync"] }

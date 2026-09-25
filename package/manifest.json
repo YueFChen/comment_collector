@@ -1,0 +1,25 @@
+{
+  "manifestVersion": 2,
+  "id": "comment_collector",
+  "name": "评论采集器",
+  "version": "0.1.0",
+  "description": "匿名采集奇域关卡评论并管理本地归档。",
+  "icon": "message-circle",
+  "hostCompatibility": {
+    "minCoreVersion": "0.1.0",
+    "maxCoreVersionExclusive": "1.0.0",
+    "protocol": { "minVersion": "1.0.0", "maxVersionExclusive": "2.0.0" }
+  },
+  "platform": { "os": "windows", "architecture": "x86_64", "abi": "msvc" },
+  "ui": {
+    "entry": "ui/index.html",
+    "bridgeCompatibility": { "minVersion": "1.0.0", "maxVersionExclusive": "2.0.0" },
+    "integrations": ["theme.followHost"],
+    "contributions": [
+      { "id": "main", "kind": "activity", "title": "评论采集器", "icon": "message-circle", "defaultOrder": 400 }
+    ]
+  },
+  "backend": { "entry": "backend/wonderland-comment-collector.exe", "transport": "stdio-ndjson-v1" },
+  "contract": "contract.json",
+  "capabilities": ["network.public", "files.export", "files.reveal_own"]
+}

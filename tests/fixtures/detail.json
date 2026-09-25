@@ -1,0 +1,17 @@
+{
+  "retcode": 0,
+  "message": "OK",
+  "data": {
+    "level_info": {
+      "level_id": "100000001",
+      "level_name": "测试关卡",
+      "desc": "一段关卡描述",
+      "hot_score": "872",
+      "good_rate": "96.7%",
+      "play_type": "情景观赏",
+      "show_limit_play_num_str": "1-8",
+      "cover_img": { "url": "https://example.invalid/cover.png" },
+      "images": [{ "url": "https://example.invalid/1.png" }, { "url": "" }]
+    }
+  }
+}
