@@ -206,6 +206,19 @@ fn exports_carry_chinese_and_quote_correctly() {
 }
 
 #[test]
+fn csv_escapes_formula_like_public_text() {
+    let mut archive = sample_archive();
+    archive.comments[0].nickname = "  =HYPERLINK(\"https://example.invalid\")".to_owned();
+    archive.comments[0].content = "\t+SUM(1,1)".to_owned();
+    archive.comments[0].ip_region = "@SUM(1,1)".to_owned();
+
+    let text = String::from_utf8(export::csv(&archive)[3..].to_vec()).unwrap();
+    assert!(text.contains("'  =HYPERLINK("));
+    assert!(text.contains("\"'\t+SUM(1,1)\""));
+    assert!(text.contains("'@SUM(1,1)"));
+}
+
+#[test]
 fn storage_round_trip_and_export_paths() {
     let (plugin, temp) = setup();
     let archive = sample_archive();

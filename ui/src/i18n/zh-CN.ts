@@ -6,7 +6,7 @@
  */
 export const zh = {
   // 入口页
-  'entry.title': '评论采集器',
+  'entry.title': '奇域评论采集器',
   'entry.startCollect': '开始采集',
   'entry.recent': '最近采集',
   'entry.recentEmpty': '暂无采集记录，采集一次后这里会列出已留存的关卡。',

@@ -84,10 +84,18 @@ fn row_of(item: &CommentItem) -> [String; 14] {
 
 /// RFC 4180：含分隔符、引号或换行的字段加引号，内部引号翻倍。
 fn quote(value: &str) -> String {
-    if value.contains([',', '"', '\n', '\r']) {
-        format!("\"{}\"", value.replace('"', "\"\""))
+    // 评论来自网络。Excel 会把以 =、+、- 或 @ 开头的 CSV 字段当公式执行；
+    // 先加单引号，再按 CSV 规则转义，避免打开导出文件时触发公式。
+    let formula_candidate = value.trim_start().starts_with(['=', '+', '-', '@']);
+    let safe = if formula_candidate {
+        format!("'{value}")
     } else {
         value.to_owned()
+    };
+    if safe.contains([',', '"', '\n', '\r']) {
+        format!("\"{}\"", safe.replace('"', "\"\""))
+    } else {
+        safe
     }
 }
 

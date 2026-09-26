@@ -1,42 +1,41 @@
-> This is an independently versioned plugin repository. Local builds use the stable Core SDK from this checkout; see [Core repository boundaries](../../docs/REPOSITORY-BOUNDARIES.md).
+# 奇域评论采集器
 
-# 评论采集器插件
+`comment_collector` 是 Wonderland Assistant 的独立插件，用于无需登录地采集奇域关卡公开评论、保存在本地并导出。归档和导出会包含评论公开字段，例如昵称、UID、IP 归属地、内容、点赞数和回复关系。插件不会读取或发送用户的米游社账号凭据。
 
-`comment_collector` 是独立动态插件，用于匿名采集奇域关卡评论、本地归档和导出。插件包含自己的 manifest、contract、Vite UI 与 Rust stdio 后端；Core 不静态导入其页面、业务 crate 或命令。
+插件使用 [Core 仓库](https://github.com/YueFChen/Wonderland_Assistant)中的 UI SDK、协议 crate 和受控网络/文件服务。Core 不静态依赖本仓库的业务代码。
 
-## 功能
+## 功能与能力
 
-- 采集指定关卡的评论并汇报进度。
+- 采集指定关卡的评论并汇报进度；采集失败或取消时保留已抓取数据。
 - 浏览本地归档，再导出 JSON、CSV 或 Excel 文件。
-- 只注册一个 Workspace Activity：`main`；插件页面直接占用 Core 提供的内容区。
-- 采集进度使用 `collect.progress` 事件，并按请求 ID 过滤；取消只作用于对应的在途采集。
+- 只注册一个 Workspace Activity；采集进度通过 `collect.progress` 事件发送，并按请求 ID 关联。
+- 清单申请 `network.public`、`files.export` 和 `files.reveal_own`。网络请求不携带账号凭据；导出和打开导出目录由 Core 文件服务处理。插件不申请账号能力，也不接收任意文件系统路径。
 
-## Core 能力
+安装后需在插件管理页授权所申请的能力。未授权网络能力时，插件仍可浏览本地归档。
 
-清单申请 `network.public`、`files.export` 和 `files.reveal_own`。匿名 HTTP 请求由 Core 的公共网络服务代理；导出和打开导出目录也由 Core 文件服务处理。插件不申请账号能力，不接收任意文件系统路径。
+## 构建
 
-首次使用前，在插件管理页为该插件授予所申请的能力。若网络能力未授权，采集会返回 Core 的授权错误；本地归档浏览不需要发起网络请求。
-
-## 构建和安装
-
-在仓库根目录运行：
+在 Core 仓库检出本插件到 `plugins/comment_collector` 后，从插件目录运行：
 
 ```powershell
+# Debug 目录包，供 Debug Core 本地安装
 pnpm build
+
+# Release .wplug，供 GitHub Release 和目录校验
+node scripts/build-plugin.mjs --release --archive
 ```
 
-生成的 Windows x86_64 MSVC debug 包位于 `target/comment-collector-plugin`。启动 debug Core，在“设置 → 插件管理”安装并启用该目录，然后从 Workspace 的“评论采集器”主入口打开。
+Debug 包位于 `target/comment-collector-plugin`；Release 包名为 `comment_collector-{版本}-windows-x86_64.wplug`。Release 命令会构建优化版后端和 UI，并生成覆盖包内文件的 SHA-256 `checksums.json`。
+
+Debug Core 的插件管理页可安装 Debug 目录包。运行 Core 时需启用其 Debug 专用的 `WONDERLAND_PLUGIN_UI_ISOLATION_TEST=1` 开关。Release Core 当前明确关闭动态插件 UI；正式发布前还需由 Core 完成 WebView 隔离方案验证并开放生产插件 UI。
 
 ## 数据与导出
 
-新归档写入 `%APPDATA%\com.wonderland.assistant\plugin-data\comment_collector\archive-v1\`。旧归档是开发测试样本，不导入。导出路径由 Core 选择并返回，插件只接收生成文件的结果路径。
+归档保存在 Core 为插件提供的 `plugin-data/comment_collector/` 数据目录。插件按关卡 ID 保存累积归档；评论按 ID 去重，重复采集时以较新的公开数据更新旧记录。CSV 会对可能被表格软件解释为公式的网络文本加前缀转义。
 
-## 目录与契约
+## 包结构
 
-- `package/manifest.json`：插件兼容范围、唯一 Activity、主题集成和能力声明。
+- `package/manifest.json`：插件身份、兼容范围、Activity、主题集成和能力声明。
 - `package/contract.json`：归档查询、采集、导出及进度事件的数据契约。
-- `ui/src/main.tsx`：UI Host SDK 调用和请求关联适配；交互页面位于 `entry.tsx`、`view.ts`、`result.tsx` 等模块。
-- `src/lib.rs`：归档、采集与导出业务逻辑。
-- `src/main.rs`：stdio 插件协议及 Core 网络/文件服务适配。
-
-更改方法或事件时，需同步更新 `package/contract.json`、`ui/src/types.generated.ts` 及 UI API 适配。插件包由 `scripts/build-plugin.mjs` 生成；debug 包不包含发布签名。
+- `ui/`：插件页面及宿主 API 适配。
+- `src/lib.rs`、`src/bbs.rs`、`src/export.rs`：本地归档、匿名社区接口适配和导出逻辑。
