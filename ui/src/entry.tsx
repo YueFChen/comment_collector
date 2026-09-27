@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { ArchiveSummary, CollectProgress } from './types.generated'
-import { ChevronRight, History } from 'lucide-react'
+import type { ArchiveSummary, CollectProgress, FavoriteLevel } from './types.generated'
+import { ChevronRight, History, Star } from 'lucide-react'
 
 import type { CommentsApi } from './api'
 import { errorMessage, formatTime, validLevelId } from './display'
@@ -26,6 +26,7 @@ const backdrop = (cover: string) =>
 export function CommentsEntryPage({ api, onOpen }: EntryProps) {
   const [levelId, setLevelId] = useState('')
   const [history, setHistory] = useState<ArchiveSummary[]>([])
+  const [favorites, setFavorites] = useState<FavoriteLevel[]>([])
   const [progress, setProgress] = useState<CollectProgress | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -39,11 +40,12 @@ export function CommentsEntryPage({ api, onOpen }: EntryProps) {
   }, [])
 
   const refresh = useCallback(async () => {
-    try {
-      setHistory(await api.archives())
-    } catch {
-      // 清单读不出来不影响采集本身。
-    }
+    const [archiveResult, favoriteResult] = await Promise.allSettled([
+      api.archives(),
+      api.favorites(),
+    ])
+    if (archiveResult.status === 'fulfilled') setHistory(archiveResult.value)
+    if (favoriteResult.status === 'fulfilled') setFavorites(favoriteResult.value)
   }, [api])
 
   useEffect(() => {
@@ -117,6 +119,32 @@ export function CommentsEntryPage({ api, onOpen }: EntryProps) {
 
       <section className="cc-section">
         <h2>
+          <Star aria-hidden />
+          {t('entry.favorites')}
+        </h2>
+        {favorites.length === 0 ? (
+          <p className="cc-placeholder">{t('entry.favoritesEmpty')}</p>
+        ) : (
+          <div className="cc-recent-grid">
+            {favorites.map((item) => (
+              <button
+                key={item.level_id}
+                className="cc-recent"
+                style={{ backgroundImage: backdrop(item.cover_url) }}
+                onClick={() => onOpen(item.level_id)}
+              >
+                <span className="cc-recent-name">{item.level_name || t('common.unknownLevel')}</span>
+                <span className="cc-recent-meta">{item.level_id}</span>
+                <span className="cc-recent-meta">{t('entry.favoriteAdded', { time: formatTime(item.added_at) })}</span>
+                <ChevronRight className="cc-recent-go" aria-hidden />
+              </button>
+            ))}
+          </div>
+        )}
+      </section>
+
+      <section className="cc-section">
+        <h2>
           <History aria-hidden />
           {t('entry.recent')}
         </h2>
@@ -136,6 +164,11 @@ export function CommentsEntryPage({ api, onOpen }: EntryProps) {
                   {item.level_id} · {t('entry.historyCount', { count: item.count })}
                 </span>
                 <span className="cc-recent-meta">{formatTime(item.updated_at)}</span>
+                {item.needs_recollect ? (
+                  <span className="cc-recent-meta cc-recent-status">{t('entry.needsRecollect')}</span>
+                ) : item.collection_state === 'partial' ? (
+                  <span className="cc-recent-meta cc-recent-status">{t('entry.collectionPartial')}</span>
+                ) : null}
                 <ChevronRight className="cc-recent-go" aria-hidden />
               </button>
             ))}

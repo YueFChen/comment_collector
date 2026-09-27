@@ -33,10 +33,20 @@ struct NoNetwork;
 
 #[async_trait::async_trait]
 impl PublicHttpClient for NoNetwork {
-    async fn get_bytes(&self, _url: &str, _headers: &[(&str, &str)], _query: &[(String, String)]) -> Result<Vec<u8>, PluginFailure> {
+    async fn get_bytes(
+        &self,
+        _url: &str,
+        _headers: &[(&str, &str)],
+        _query: &[(String, String)],
+    ) -> Result<Vec<u8>, PluginFailure> {
         Err(PluginFailure::Connection)
     }
-    async fn post_json(&self, _url: &str, _headers: &[(&str, &str)], _body: &str) -> Result<Vec<u8>, PluginFailure> {
+    async fn post_json(
+        &self,
+        _url: &str,
+        _headers: &[(&str, &str)],
+        _body: &str,
+    ) -> Result<Vec<u8>, PluginFailure> {
         Err(PluginFailure::Connection)
     }
 }
@@ -280,13 +290,15 @@ fn rejects_archive_that_is_not_readable() {
         Err(PluginFailure::LocalData(message)) if message.contains("JSON")
     ));
 
-    // 清单：结构对不上的归档仍要列出来，否则界面显示"还没采过"、用户以为数据丢了；
-    // 内容不可信时退回文件名。连 JSON 都不是的文件没有任何可展示信息，跳过。
+    // 损坏和结构不兼容的归档都保留入口，用户可从列表启动重新采集。
     let list = plugin.archives().unwrap();
-    assert_eq!(list.len(), 1);
-    assert_eq!(list[0].level_id, "100000001", "退回文件名");
-    assert!(list[0].level_name.is_empty());
-    assert_eq!(list[0].count, 0);
+    assert_eq!(list.len(), 2);
+    for level_id in ["100000001", "100000002"] {
+        let item = list.iter().find(|item| item.level_id == level_id).unwrap();
+        assert!(item.needs_recollect);
+        assert!(item.level_name.is_empty());
+        assert_eq!(item.count, 0);
+    }
 
     fs::remove_dir_all(temp).unwrap();
 }
@@ -311,6 +323,35 @@ fn checkpoint_merges_comments_without_counting_a_fetch() {
     assert_eq!(archive.last_pages, 5);
     assert_eq!(archive.updated_at, 1_750_000_000);
     assert_eq!(archive.comments.len(), 3);
+}
+
+#[test]
+fn archive_service_pages_are_bounded_and_omit_private_fields() {
+    let (plugin, temp) = setup();
+    let archive = sample_archive();
+    plugin.save(&archive).unwrap();
+
+    let page = plugin
+        .archive_page(&archive.level.level_id, 0, 2)
+        .unwrap()
+        .unwrap();
+    assert_eq!(page.comments.len(), 2);
+    assert_eq!(page.total_count as usize, archive.comments.len());
+    assert_eq!(page.offset, 0);
+
+    let json = serde_json::to_value(page).unwrap();
+    let first = &json["comments"][0];
+    assert!(first.get("uid").is_none());
+    assert!(first.get("avatar_url").is_none());
+    assert!(first.get("ip_region").is_none());
+    assert!(first.get("reply_id").is_none());
+    assert!(first.get("parent_id").is_none());
+    let summaries = plugin.service_archives().unwrap();
+    let summary = serde_json::to_value(&summaries[0]).unwrap();
+    assert!(summary.get("cover_url").is_none());
+    assert_eq!(summary["level_id"], archive.level.level_id);
+    assert!(plugin.archive_page(&archive.level.level_id, 0, 51).is_err());
+    fs::remove_dir_all(temp).unwrap();
 }
 
 #[test]

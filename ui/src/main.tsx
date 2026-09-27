@@ -6,11 +6,14 @@ import { CommentsEntryPage, CommentsResultPage } from './index'
 import type { CommentsApi } from './api'
 import type {
   ArchiveSummary,
+  ArchiveOverview,
+  ArchiveViewPage,
+  ArchiveViewQuery,
   CollectProgress,
-  CommentArchive,
   CommentQuery,
   ExportFormat,
   ExportOutcome,
+  FavoriteLevel,
 } from './types.generated'
 import './host.css'
 
@@ -24,7 +27,7 @@ const api: CommentsApi = {
     const unsubscribe = await host.subscribe('collect.progress', (event) => {
       if (event.requestId === requestId) onProgress(event.payload as CollectProgress)
     })
-    const call = host.callWithId<CommentArchive>('collect', { query })
+    const call = host.callWithId<ArchiveOverview>('collect', { query })
     requestId = call.requestId
     activeCollectId = requestId
     try {
@@ -37,8 +40,10 @@ const api: CommentsApi = {
   cancel: async () => {
     if (activeCollectId) host.cancel(activeCollectId)
   },
-  archive: (levelId) => host.call<CommentArchive | null>('archive', { level_id: levelId }),
+  archiveView: (query: ArchiveViewQuery) => host.call<ArchiveViewPage | null>('archive_view', query),
   archives: () => host.call<ArchiveSummary[]>('archives'),
+  favorites: () => host.call<FavoriteLevel[]>('favorites'),
+  toggleFavorite: (levelId) => host.call<boolean>('favorite_toggle', { level_id: levelId }),
   export: (levelId, format: ExportFormat) => host.call<ExportOutcome>('export', { level_id: levelId, format }),
   exportDir: () => host.call<string>('export_dir'),
   revealDir: async () => { await host.call('reveal_dir') },

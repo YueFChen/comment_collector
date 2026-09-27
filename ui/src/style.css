@@ -138,6 +138,13 @@
   background: var(--app-glass-hover);
   color: var(--app-ink);
 }
+.cc-favorite--active {
+  border-color: var(--app-accent-line);
+  color: #ffd46a;
+}
+.cc-favorite--active:hover:not(:disabled) {
+  color: #ffe09a;
+}
 .cc-small {
   padding: 5px 10px;
   font-size: 11px;
@@ -163,7 +170,8 @@
 
 /* ---------- 状态条 ---------- */
 .cc-error,
-.cc-notice {
+.cc-notice,
+.cc-warning {
   display: flex;
   gap: 10px;
   margin-top: 14px;
@@ -181,6 +189,11 @@
   border: 1px solid var(--app-success-line);
   background: var(--app-success-soft);
   color: var(--app-success);
+}
+.cc-warning {
+  border: 1px solid var(--app-warning-line, #d3a14c);
+  background: var(--app-warning-soft, #382b13);
+  color: var(--app-warning, #f1c66b);
 }
 .cc-progress {
   margin-top: 14px;
@@ -293,6 +306,9 @@
   color: #cfc6e8;
   font-size: 11px;
   text-shadow: 0 1px 6px #000000cc;
+}
+.cc-recent-status {
+  color: #ffd58a;
 }
 .cc-recent-go {
   position: absolute;

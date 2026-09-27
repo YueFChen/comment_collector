@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type {
+  ArchiveOverview,
+  ArchiveViewPage,
   CollectProgress,
-  CommentArchive,
+  CommentGroup,
   CommentItem,
   ExportFormat,
+  CollectionState,
 } from './types.generated'
 import {
   ArrowLeft,
@@ -16,6 +19,7 @@ import {
   Inbox,
   RotateCw,
   Search,
+  Star,
   ThumbsUp,
   Users,
 } from 'lucide-react'
@@ -39,11 +43,6 @@ import {
 import { t } from './i18n'
 import { CollectProgressBar } from './progress'
 import {
-  clampPage,
-  filterGroups,
-  groupComments,
-  pageSlice,
-  sortGroups,
   type Filter,
   type Sort,
 } from './view'
@@ -79,6 +78,16 @@ const RECOMMEND_LABEL: Record<RecommendState, string> = {
   unknown: '—',
 }
 
+function collectionStatus(state: CollectionState, message: string): string {
+  if (state === 'complete') return t('result.collectionComplete')
+  if (state === 'partial') {
+    return t('result.collectionPartial', {
+      message: message || t('result.collectionPartialDefault'),
+    })
+  }
+  return t('result.collectionUnknown')
+}
+
 /**
  * 评论结果页。
  *
@@ -86,10 +95,12 @@ const RECOMMEND_LABEL: Record<RecommendState, string> = {
  * 唯一的写入操作是「重新采集」，且结果同样落到归档。
  */
 export function CommentsResultPage({ api, levelId, onBack }: ResultProps) {
-  const [archive, setArchive] = useState<CommentArchive | null>(null)
+  const [archive, setArchive] = useState<ArchiveViewPage | null>(null)
   const [directory, setDirectory] = useState('')
   const [progress, setProgress] = useState<CollectProgress | null>(null)
   const [busy, setBusy] = useState(false)
+  const [favoriteBusy, setFavoriteBusy] = useState(false)
+  const [isFavorite, setIsFavorite] = useState(false)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   // 存导出路径（数据）而不是取好的文案：文案在渲染时才解析。
@@ -100,10 +111,13 @@ export function CommentsResultPage({ api, levelId, onBack }: ResultProps) {
   const [keyword, setKeyword] = useState('')
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(20)
+  const [queryRevision, setQueryRevision] = useState(0)
+  const [pageLoading, setPageLoading] = useState(false)
   const [expanded, setExpanded] = useState<Record<string, boolean>>({})
   const [descOpen, setDescOpen] = useState(false)
   const [imageIndex, setImageIndex] = useState(0)
   const generation = useRef(0)
+  const favoriteGeneration = useRef(0)
   const mounted = useRef(true)
 
   useEffect(() => {
@@ -125,9 +139,22 @@ export function CommentsResultPage({ api, levelId, onBack }: ResultProps) {
       })
   }, [api])
 
-  const load = useCallback(async () => {
-    const request = ++generation.current
+  useEffect(() => {
+    const request = ++favoriteGeneration.current
+    setIsFavorite(false)
+    void api.favorites().then((items) => {
+      if (favoriteGeneration.current === request && mounted.current) {
+        setIsFavorite(items.some((item) => item.level_id === levelId))
+      }
+    }).catch(() => undefined)
+    return () => {
+      if (favoriteGeneration.current === request) favoriteGeneration.current++
+    }
+  }, [api, levelId])
+
+  useEffect(() => {
     // 换关卡时先清空视图状态，免得旧筛选条件落到新数据上。
+    setArchive(null)
     setFilter('all')
     setSort('default')
     setKeyword('')
@@ -136,56 +163,68 @@ export function CommentsResultPage({ api, levelId, onBack }: ResultProps) {
     setDescOpen(false)
     setImageIndex(0)
     setExportedPath(null)
+    setError('')
+    setLoading(true)
+  }, [api, levelId])
+
+  useEffect(() => {
+    const request = ++generation.current
     if (!validLevelId(levelId)) {
       setArchive(null)
       setError(t('common.invalidId'))
       setLoading(false)
+      setPageLoading(false)
       return
     }
-    setLoading(true)
-    setError('')
-    try {
-      const loaded = await api.archive(levelId)
+    setPageLoading(true)
+    void api.archiveView({
+      level_id: levelId,
+      offset: (page - 1) * pageSize,
+      limit: pageSize,
+      filter,
+      sort,
+      keyword,
+    }).then((loaded) => {
       if (generation.current !== request || !mounted.current) return
       setArchive(loaded)
       if (!loaded) setError(t('result.noArchive'))
-    } catch (cause) {
+    }).catch((cause: unknown) => {
       if (generation.current === request && mounted.current) {
         setArchive(null)
         setError(errorMessage(cause, t('common.failed')))
       }
-    } finally {
-      if (generation.current === request && mounted.current) setLoading(false)
+    }).finally(() => {
+      if (generation.current === request && mounted.current) {
+        setLoading(false)
+        setPageLoading(false)
+      }
+    })
+    return () => {
+      if (generation.current === request) generation.current++
     }
-  }, [api, levelId])
-
-  useEffect(() => {
-    void load()
-  }, [load])
+  }, [api, levelId, page, pageSize, filter, sort, keyword, queryRevision])
 
   const recollect = useCallback(async () => {
-    const request = ++generation.current
     setBusy(true)
     setError('')
     setExportedPath(null)
     setProgress({ page: 0, fetched: 0 })
     try {
       // 一律抓全量：这个页面不提供限页入口，重新采集就是要把归档补到最新最全。
-      const result = await api.collect({ level_id: levelId }, (next) => {
-        if (generation.current === request && mounted.current) setProgress(next)
+      await api.collect({ level_id: levelId }, (next) => {
+        if (mounted.current) setProgress(next)
       })
-      if (generation.current !== request || !mounted.current) return
-      setArchive(result)
+      if (!mounted.current) return
+      setPage(1)
+      setQueryRevision((current) => current + 1)
     } catch (cause) {
-      if (generation.current === request && mounted.current) {
+      if (mounted.current) {
         setError(errorMessage(cause, t('common.failed')))
-        // 失败与取消时后端也会把已抓到的页落盘（见 collect 的检查点）。
-        // 只重读归档，不走 load()：那会把用户当前的筛选、排序与展开状态一起冲掉。
-        const partial = await api.archive(levelId).catch(() => null)
-        if (generation.current === request && mounted.current && partial) setArchive(partial)
+        // 失败与取消时后端会保存完成状态和已抓到的数据；重读当前页以显示最新状态。
+        setQueryRevision((current) => current + 1)
       }
     } finally {
-      if (generation.current === request && mounted.current) {
+      if (mounted.current) {
         setBusy(false)
         setProgress(null)
       }
@@ -195,6 +234,19 @@ export function CommentsResultPage({ api, levelId, onBack }: ResultProps) {
   const stop = useCallback(() => {
     void api.cancel().catch(() => undefined)
   }, [api])
+
+  const toggleFavorite = useCallback(async () => {
+    setFavoriteBusy(true)
+    setError('')
+    try {
+      const next = await api.toggleFavorite(levelId)
+      if (mounted.current) setIsFavorite(next)
+    } catch (cause) {
+      if (mounted.current) setError(errorMessage(cause, t('common.failed')))
+    } finally {
+      if (mounted.current) setFavoriteBusy(false)
+    }
+  }, [api, levelId])
 
   /** 打开导出目录；具体路径由宿主从插件取，前端只表达「打开」这个意图。 */
   const reveal = useCallback(async () => {
@@ -220,21 +272,19 @@ export function CommentsResultPage({ api, levelId, onBack }: ResultProps) {
     [api, levelId],
   )
 
-  const groups = useMemo(() => groupComments(archive?.comments ?? []), [archive])
-  const visible = useMemo(
-    () => sortGroups(filterGroups(groups, filter, keyword), sort),
-    [groups, filter, keyword, sort],
-  )
-  const safePage = clampPage(page, visible.length, pageSize)
-  const pageCount = Math.max(1, Math.ceil(visible.length / pageSize))
-  const shown = useMemo(() => pageSlice(visible, safePage, pageSize), [visible, safePage, pageSize])
+  const overview: ArchiveOverview | null = archive?.overview ?? null
+  const groups: CommentGroup[] = archive?.groups ?? []
+  const totalGroups = archive?.total_groups ?? 0
+  const safePage = page
+  const pageCount = Math.max(1, Math.ceil(totalGroups / pageSize))
+  const shown = groups
 
-  const images = useMemo(() => (archive ? gallery(archive.level) : []), [archive])
+  const images = useMemo(() => (overview ? gallery(overview.level) : []), [overview])
   const coverIndex = images.length ? Math.min(imageIndex, images.length - 1) : 0
   const cover = images[coverIndex] ?? ''
   // 分档与数值文本的类分开取：流光只能套文字，套到图标上会让它消失。
-  const hot = hotLevel(archive?.level.hot_score ?? '')
-  const rate = rateLevel(archive?.level.good_rate ?? '')
+  const hot = hotLevel(overview?.level.hot_score ?? '')
+  const rate = rateLevel(overview?.level.good_rate ?? '')
   // 展开控件只针对当前页：分页之后「全部展开」若跨页生效，用户看不到发生了什么。
   const expandable = useMemo(() => shown.filter((item) => item.subs.length > 0), [shown])
   const expandedOnPage = expandable.filter((item) => expanded[item.main.reply_id]).length
@@ -277,7 +327,7 @@ export function CommentsResultPage({ api, levelId, onBack }: ResultProps) {
   }
 
   const filtering = filter !== 'all' || keyword.trim() !== ''
-  const canExport = Boolean(archive) && !busy
+  const canExport = Boolean(overview) && !busy
 
   const renderComment = (item: CommentItem, isSub: boolean) => {
     const state = recommendState(item)
@@ -321,13 +371,22 @@ export function CommentsResultPage({ api, levelId, onBack }: ResultProps) {
         </button>
         <p className="cc-result-meta">
           {t('common.levelId')} {levelId}
-          {archive
-            ? ` · ${t('result.updatedAt')} ${formatTime(archive.updated_at)} · ${t('result.fetchCount', { count: archive.fetch_count })}`
+          {overview
+            ? ` · ${t('result.updatedAt')} ${formatTime(overview.updated_at)} · ${t('result.fetchCount', { count: overview.fetch_count })}`
             : ''}
         </p>
         <button
+          className={isFavorite ? 'cc-ghost cc-favorite cc-favorite--active' : 'cc-ghost cc-favorite'}
+          disabled={favoriteBusy || loading || (!isFavorite && !overview)}
+          aria-pressed={isFavorite}
+          onClick={() => void toggleFavorite()}
+        >
+          <Star aria-hidden fill={isFavorite ? 'currentColor' : 'none'} />
+          {isFavorite ? t('result.removeFavorite') : t('result.addFavorite')}
+        </button>
+        <button
           className="cc-primary"
-          disabled={busy || loading || !validLevelId(levelId)}
+          disabled={busy || loading || pageLoading || !validLevelId(levelId)}
           onClick={() => void recollect()}
         >
           <RotateCw className={busy ? 'cc-spin' : undefined} aria-hidden />
@@ -345,6 +404,14 @@ export function CommentsResultPage({ api, levelId, onBack }: ResultProps) {
           <span>{t('result.exported', { path: exportedPath })}</span>
         </div>
       )}
+      {overview && (
+        <div
+          className={!busy && overview.collection_state === 'complete' ? 'cc-notice' : 'cc-warning'}
+          role="status"
+        >
+          <span>{busy ? t('result.collectionInProgress') : collectionStatus(overview.collection_state, overview.collection_message)}</span>
+        </div>
+      )}
       {busy && <CollectProgressBar progress={progress} onCancel={stop} />}
 
       {loading ? (
@@ -354,9 +421,9 @@ export function CommentsResultPage({ api, levelId, onBack }: ResultProps) {
       ) : !archive ? (
         <div className="cc-empty">
           <Inbox aria-hidden />
-          <p>{t('result.noArchive')}</p>
-          <button className="cc-link" onClick={onBack}>
-            {t('result.goCollect')}
+          <p>{error ? t('result.archiveUnreadable') : t('result.noArchive')}</p>
+          <button className="cc-link" onClick={() => error ? void recollect() : onBack()}>
+            {error ? t('result.recollect') : t('result.goCollect')}
           </button>
         </div>
       ) : (
@@ -389,10 +456,10 @@ export function CommentsResultPage({ api, levelId, onBack }: ResultProps) {
               </div>
             )}
             <div className="cc-level-body">
-              <h2>{archive.level.level_name || t('common.unknownLevel')}</h2>
-              {archive.level.desc && (
+              <h2>{overview?.level.level_name || t('common.unknownLevel')}</h2>
+              {overview?.level.desc && (
                 <div className={descOpen ? 'cc-desc cc-desc--open' : 'cc-desc'}>
-                  <p>{archive.level.desc}</p>
+                  <p>{overview.level.desc}</p>
                   <button className="cc-desc-toggle" onClick={() => setDescOpen((open) => !open)}>
                     {descOpen ? t('result.collapseDesc') : t('result.expandDesc')}
                   </button>
@@ -403,28 +470,28 @@ export function CommentsResultPage({ api, levelId, onBack }: ResultProps) {
                   <Flame className={hotIconClass(hot)} aria-hidden />
                   <div>
                     <small>{t('result.hotScore')}</small>
-                    <strong className={hotValueClass(hot)}>{archive.level.hot_score || '—'}</strong>
+                    <strong className={hotValueClass(hot)}>{overview?.level.hot_score || '—'}</strong>
                   </div>
                 </div>
                 <div className="cc-tile">
                   <ThumbsUp className={rateIconClass(rate)} aria-hidden />
                   <div>
                     <small>{t('result.goodRate')}</small>
-                    <strong className={rateValueClass(rate)}>{archive.level.good_rate || '—'}</strong>
+                    <strong className={rateValueClass(rate)}>{overview?.level.good_rate || '—'}</strong>
                   </div>
                 </div>
                 <div className="cc-tile">
                   <Users aria-hidden />
                   <div>
                     <small>{t('result.playRange')}</small>
-                    <strong>{archive.level.play_range || '—'}</strong>
+                    <strong>{overview?.level.play_range || '—'}</strong>
                   </div>
                 </div>
                 <div className="cc-tile">
                   <Gamepad2 aria-hidden />
                   <div>
                     <small>{t('result.playType')}</small>
-                    <strong>{archive.level.play_type || '—'}</strong>
+                    <strong>{overview?.level.play_type || '—'}</strong>
                   </div>
                 </div>
               </div>
@@ -480,12 +547,14 @@ export function CommentsResultPage({ api, levelId, onBack }: ResultProps) {
           {/* 导出与「当前区间」同处一行：导出按钮本来就不需要单独占一条。 */}
           <div className="cc-result-bar">
             <span className="cc-range">
-              {visible.length === 0
+              {pageLoading
+                ? t('result.pageLoading')
+                : totalGroups === 0
                 ? t('result.pageRange', { from: 0, to: 0, total: 0 })
                 : t('result.pageRange', {
                     from: (safePage - 1) * pageSize + 1,
-                    to: Math.min(safePage * pageSize, visible.length),
-                    total: visible.length,
+                    to: Math.min(safePage * pageSize, totalGroups),
+                    total: totalGroups,
                   })}
             </span>
             {directory && (
@@ -509,12 +578,16 @@ export function CommentsResultPage({ api, levelId, onBack }: ResultProps) {
             </div>
           </div>
 
-          {visible.length === 0 ? (
+          {pageLoading ? (
+            <div className="cc-empty" role="status">
+              {t('result.pageLoading')}
+            </div>
+          ) : totalGroups === 0 ? (
             <div className="cc-empty">
               <Search aria-hidden />
               {/* 归档本身为空与「筛没了」是两回事，提示要分开。 */}
-              <p>{groups.length === 0 ? t('result.noComments') : t('result.noMatch')}</p>
-              {filtering && groups.length > 0 && (
+              <p>{overview?.comment_count === 0 ? t('result.noComments') : t('result.noMatch')}</p>
+              {filtering && (overview?.comment_count ?? 0) > 0 && (
                 <button className="cc-link" onClick={clearFilters}>
                   {t('result.clearFilters')}
                 </button>

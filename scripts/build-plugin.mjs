@@ -9,8 +9,17 @@ const release = process.argv.includes('--release')
 const archive = process.argv.includes('--archive')
 const manifest = JSON.parse(await readFile(path.join(root, 'package/manifest.json'), 'utf8'))
 const cargoToml = await readFile(path.join(root, 'Cargo.toml'), 'utf8')
+const rootPackage = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'))
+const uiPackage = JSON.parse(await readFile(path.join(root, 'ui/package.json'), 'utf8'))
 const cargoPackageName = cargoToml.match(/^name\s*=\s*"([a-z0-9_-]+)"/m)?.[1]
+const cargoVersion = cargoToml.match(/^\[workspace\.package\]\s*\r?\nversion\s*=\s*"([^"]+)"/m)?.[1]
 if (!cargoPackageName) throw new Error('Cannot read the package name from Cargo.toml.')
+if (!cargoVersion || [rootPackage.version, uiPackage.version].some((version) => version !== cargoVersion) || manifest.version !== cargoVersion) {
+  throw new Error('Plugin versions differ between Cargo.toml, package.json, ui/package.json, and manifest.json.')
+}
+if (process.env.GITHUB_REF_TYPE === 'tag' && process.env.GITHUB_REF_NAME !== `v${manifest.version}`) {
+  throw new Error(`Release tag must be v${manifest.version}.`)
+}
 if (!/^[a-z][a-z0-9_-]{0,63}$/.test(manifest.id ?? '')) throw new Error('manifest.json has an invalid plugin ID.')
 if (!/^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-[0-9A-Za-z.-]+)?$/.test(manifest.version ?? '')) {
   throw new Error('manifest.json has an invalid plugin version.')

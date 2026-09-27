@@ -12,20 +12,21 @@ mod tests;
 pub use model::*;
 
 use std::{
+    collections::HashMap,
     fs,
     path::PathBuf,
     sync::{
-        Arc,
+        Arc, Mutex as StdMutex,
         atomic::{AtomicBool, Ordering},
     },
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+pub use bbs::PublicHttpClient;
 use bbs::{Bbs, MAX_PAGES};
 use tokio::sync::Mutex;
 use tracing::{debug, info, instrument, warn};
 use wonderland_plugin_sdk::PluginFailure;
-pub use bbs::PublicHttpClient;
 
 /// 翻页间隔。
 ///
@@ -47,6 +48,12 @@ const CHECKPOINT_PAGES: u32 = 10;
 const PAGE_RETRIES: u32 = 2;
 /// 重试退避基数：第 n 次重试等 `RETRY_BACKOFF * 3^n`，即 300ms、900ms。
 const RETRY_BACKOFF: Duration = Duration::from_millis(300);
+
+/// Core 的 `core.files.export` 接口单文件上限。先在插件侧检查，给出可读错误。
+const CORE_EXPORT_MAX_BYTES: usize = 20 * 1024 * 1024;
+/// 单个插件最多保留的本地收藏关卡数。
+const MAX_FAVORITES: usize = 2_000;
+const FAVORITES_SCHEMA_VERSION: u32 = 1;
 
 /// 只有网络类失败值得重试。
 ///
@@ -99,6 +106,44 @@ pub struct CommentCollector {
     collecting: Mutex<()>,
     /// 取消标记：由宿主置位，采集循环在翻页间隙检查。
     cancel: Arc<AtomicBool>,
+    /// 当前浏览关卡的解析结果，避免每次翻页重新读取整份 JSON。
+    view_cache: StdMutex<Option<CachedArchive>>,
+    /// 串行化收藏列表的读改写，避免并发切换时丢失条目。
+    favorites_lock: StdMutex<()>,
+}
+
+#[derive(serde::Serialize, serde::Deserialize)]
+struct FavoritesFile {
+    schema_version: u32,
+    items: Vec<FavoriteLevel>,
+}
+
+struct CachedArchive {
+    level_id: String,
+    modified: Option<SystemTime>,
+    length: u64,
+    archive: Arc<CommentArchive>,
+}
+
+struct GroupIndices {
+    main: Option<usize>,
+    subs: Vec<usize>,
+}
+
+fn comment_matches(item: &CommentItem, keyword: &str) -> bool {
+    item.nickname.to_lowercase().contains(keyword)
+        || item.uid.contains(keyword)
+        || item.ip_region.to_lowercase().contains(keyword)
+        || item.content.to_lowercase().contains(keyword)
+}
+
+fn floor_rank(value: &str) -> i64 {
+    let digits: String = value
+        .trim_start()
+        .chars()
+        .take_while(char::is_ascii_digit)
+        .collect();
+    digits.parse().unwrap_or(i64::MAX)
 }
 
 impl CommentCollector {
@@ -109,18 +154,30 @@ impl CommentCollector {
             bbs: Bbs::new(http),
             collecting: Mutex::new(()),
             cancel: Arc::new(AtomicBool::new(false)),
+            view_cache: StdMutex::new(None),
+            favorites_lock: StdMutex::new(()),
         })
     }
 
     /// Produce an export payload for the controlled Core file service.
-    pub fn export_payload(&self, level_id: &str, format: ExportFormat) -> Result<ExportPayload, PluginFailure> {
-        let archive = self.archive(level_id)?
+    pub fn export_payload(
+        &self,
+        level_id: &str,
+        format: ExportFormat,
+    ) -> Result<ExportPayload, PluginFailure> {
+        let archive = self
+            .archive(level_id)?
             .ok_or_else(|| PluginFailure::LocalData("尚未采集过该关卡".into()))?;
         let (extension, content) = match format {
             ExportFormat::Json => ("json", export::json(&archive)?),
             ExportFormat::Csv => ("csv", export::csv(&archive)),
             ExportFormat::Excel => ("xlsx", export::excel(&archive)?),
         };
+        if content.len() > CORE_EXPORT_MAX_BYTES {
+            return Err(PluginFailure::Other(
+                "导出文件超过 Core 的 20 MiB 单文件上限；本地归档未受影响".into(),
+            ));
+        }
         Ok(ExportPayload {
             name: export::file_name(&archive, extension),
             content,
@@ -171,12 +228,14 @@ impl CommentCollector {
         archive: &mut CommentArchive,
         incoming: Vec<CommentItem>,
         started_at: u64,
+        pages: u32,
+        message: &str,
     ) -> Result<(), PluginFailure> {
-        if incoming.is_empty() {
-            return Ok(());
-        }
         archive.merge_comments(incoming);
         archive.updated_at = started_at;
+        archive.last_pages = pages;
+        archive.collection_state = CollectionState::Partial;
+        archive.collection_message = message.to_owned();
         self.save(archive)
     }
 
@@ -187,43 +246,211 @@ impl CommentCollector {
         Ok(self.root.join(format!("{level_id}.json")))
     }
 
-    /// 读取本地归档（不触发采集）；从未采集过该关卡时为 `None`。
-    ///
-    /// 这些失败都出在**本地文件**上，不能借用 `InvalidResponse`——
-    /// 那条错误的文案说的是"官方接口数据结构已变化"，会把用户指向错误的方向。
-    pub fn archive(&self, level_id: &str) -> Result<Option<CommentArchive>, PluginFailure> {
-        let path = self.archive_path(level_id)?;
-        if !path.exists() {
-            return Ok(None);
-        }
-        // 先用 Value 取出版本、再解析整体：结构变化时旧归档会解析失败，
-        // 若直接解析就永远走不到版本判断，只剩一句无从下手的"无法解析"。
-        let value: serde_json::Value = serde_json::from_slice(&fs::read(&path).map_err(storage)?)
-            .map_err(|_| {
+    fn parse_archive(&self, level_id: &str, bytes: &[u8]) -> Result<CommentArchive, PluginFailure> {
+        let value: serde_json::Value = serde_json::from_slice(bytes).map_err(|_| {
             warn!(level_id, "本地归档不是有效的 JSON");
             PluginFailure::LocalData("本地归档不是有效的 JSON，请重新采集".into())
         })?;
-        if value
+        let version = value
             .get("schema_version")
-            .and_then(serde_json::Value::as_u64)
-            != Some(u64::from(ARCHIVE_VERSION))
-        {
-            warn!(level_id, "本地归档版本不匹配");
+            .and_then(serde_json::Value::as_u64);
+        if !matches!(version, Some(1) | Some(2)) {
+            warn!(level_id, ?version, "本地归档版本不匹配");
             return Err(PluginFailure::LocalData(
                 "本地归档版本不匹配，请重新采集".into(),
             ));
         }
-        let archive: CommentArchive = serde_json::from_value(value).map_err(|_| {
+        let mut archive: CommentArchive = serde_json::from_value(value).map_err(|_| {
             warn!(level_id, "本地归档结构已变化");
             PluginFailure::LocalData("本地归档结构已变化，请重新采集".into())
         })?;
-        if !archive.level.level_id.is_empty() && archive.level.level_id != level_id {
+        if archive.level.level_id != level_id {
             warn!(level_id, "本地归档所属关卡与文件名不一致");
             return Err(PluginFailure::LocalData(
                 "本地归档所属关卡与文件名不一致，请重新采集".into(),
             ));
         }
+        if version == Some(1) {
+            archive.schema_version = ARCHIVE_VERSION;
+            archive.collection_state = CollectionState::Unknown;
+            archive.collection_message.clear();
+        }
+        Ok(archive)
+    }
+
+    /// 读取本地归档（不触发采集）；v1 归档在内存中迁移到 v2。
+    pub fn archive(&self, level_id: &str) -> Result<Option<CommentArchive>, PluginFailure> {
+        let path = self.archive_path(level_id)?;
+        if !path.exists() {
+            return Ok(None);
+        }
+        let bytes = fs::read(path).map_err(storage)?;
+        self.parse_archive(level_id, &bytes).map(Some)
+    }
+
+    fn cached_archive(&self, level_id: &str) -> Result<Option<Arc<CommentArchive>>, PluginFailure> {
+        let path = self.archive_path(level_id)?;
+        let metadata = match fs::metadata(&path) {
+            Ok(metadata) => metadata,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(error) => return Err(storage(error)),
+        };
+        let modified = metadata.modified().ok();
+        if let Ok(cache) = self.view_cache.lock()
+            && let Some(cached) = cache.as_ref()
+            && cached.level_id == level_id
+            && cached.length == metadata.len()
+            && cached.modified == modified
+        {
+            return Ok(Some(cached.archive.clone()));
+        }
+        let archive = Arc::new(
+            self.archive(level_id)?
+                .ok_or(PluginFailure::InvalidResponse)?,
+        );
+        if let Ok(mut cache) = self.view_cache.lock() {
+            *cache = Some(CachedArchive {
+                level_id: level_id.to_owned(),
+                modified,
+                length: metadata.len(),
+                archive: archive.clone(),
+            });
+        }
         Ok(Some(archive))
+    }
+
+    /// 给本插件 UI 返回一页完整评论，按主评论分组；筛选和排序在后端完成。
+    pub fn archive_view(
+        &self,
+        query: ArchiveViewQuery,
+    ) -> Result<Option<ArchiveViewPage>, PluginFailure> {
+        if !(1..=100).contains(&query.limit) || query.keyword.chars().count() > 512 {
+            return Err(PluginFailure::InvalidInput);
+        }
+        let Some(archive) = self.cached_archive(&query.level_id)? else {
+            return Ok(None);
+        };
+        let mut positions = HashMap::<String, usize>::new();
+        let mut groups = Vec::<GroupIndices>::new();
+        for (index, item) in archive.comments.iter().enumerate() {
+            let key = if item.is_sub {
+                &item.parent_id
+            } else {
+                &item.reply_id
+            };
+            let position = *positions.entry(key.clone()).or_insert_with(|| {
+                groups.push(GroupIndices {
+                    main: None,
+                    subs: Vec::new(),
+                });
+                groups.len() - 1
+            });
+            if item.is_sub {
+                groups[position].subs.push(index);
+            } else {
+                groups[position].main = Some(index);
+            }
+        }
+        let keyword = query.keyword.trim().to_lowercase();
+        let mut visible: Vec<&GroupIndices> = groups
+            .iter()
+            .filter(|group| {
+                let Some(main_index) = group.main else {
+                    return false;
+                };
+                let main = &archive.comments[main_index];
+                let selected = match query.filter {
+                    ArchiveFilter::All => true,
+                    ArchiveFilter::Recommend => main.is_recommend == Some(true),
+                    ArchiveFilter::NotRecommend => main.is_recommend == Some(false),
+                    ArchiveFilter::Owner => main.is_owner,
+                };
+                selected
+                    && (keyword.is_empty()
+                        || comment_matches(main, &keyword)
+                        || group
+                            .subs
+                            .iter()
+                            .any(|index| comment_matches(&archive.comments[*index], &keyword)))
+            })
+            .collect();
+        visible.sort_by(|left, right| {
+            let left = &archive.comments[left.main.expect("filtered groups have a main comment")];
+            let right = &archive.comments[right.main.expect("filtered groups have a main comment")];
+            match query.sort {
+                ArchiveSort::Default => std::cmp::Ordering::Equal,
+                ArchiveSort::Newest => right.created_at.cmp(&left.created_at),
+                ArchiveSort::Oldest => left.created_at.cmp(&right.created_at),
+                ArchiveSort::Likes => right.like_count.cmp(&left.like_count),
+                ArchiveSort::Floor => floor_rank(&left.floor_id).cmp(&floor_rank(&right.floor_id)),
+            }
+        });
+        let total_groups = visible.len().min(u32::MAX as usize) as u32;
+        let start = (query.offset as usize).min(visible.len());
+        let end = start
+            .saturating_add(query.limit as usize)
+            .min(visible.len());
+        let page_groups = visible[start..end]
+            .iter()
+            .map(|group| CommentGroup {
+                main: archive.comments[group.main.expect("filtered groups have a main comment")]
+                    .clone(),
+                subs: group
+                    .subs
+                    .iter()
+                    .map(|index| archive.comments[*index].clone())
+                    .collect(),
+            })
+            .collect();
+        Ok(Some(ArchiveViewPage {
+            overview: ArchiveOverview::from(archive.as_ref()),
+            total_groups,
+            offset: query.offset,
+            groups: page_groups,
+        }))
+    }
+
+    /// Read a bounded page for the declared inter-plugin archive service.
+    /// UID, avatar URL, and IP region are omitted from this cross-plugin DTO.
+    pub fn archive_page(
+        &self,
+        level_id: &str,
+        offset: u32,
+        limit: u32,
+    ) -> Result<Option<CommentArchivePage>, PluginFailure> {
+        if !(1..=50).contains(&limit) {
+            return Err(PluginFailure::InvalidInput);
+        }
+        let Some(archive) = self.cached_archive(level_id)? else {
+            return Ok(None);
+        };
+        let total_count = archive.comments.len().min(u32::MAX as usize) as u32;
+        let start = (offset as usize).min(archive.comments.len());
+        let end = start
+            .saturating_add(limit as usize)
+            .min(archive.comments.len());
+        let comments = archive.comments[start..end]
+            .iter()
+            .map(|item| CommentArchiveServiceItem {
+                floor_id: item.floor_id.clone(),
+                nickname: item.nickname.clone(),
+                content: item.content.clone(),
+                is_recommend: item.is_recommend,
+                like_count: item.like_count,
+                reply_count: item.reply_count,
+                created_at: item.created_at,
+                is_sub: item.is_sub,
+                reply_to: item.reply_to.clone(),
+            })
+            .collect();
+        Ok(Some(CommentArchivePage {
+            level_id: archive.level.level_id.clone(),
+            level_name: archive.level.level_name.clone(),
+            updated_at: archive.updated_at,
+            total_count,
+            offset,
+            comments,
+        }))
     }
 
     fn save(&self, archive: &CommentArchive) -> Result<(), PluginFailure> {
@@ -232,10 +459,18 @@ impl CommentCollector {
             fs::create_dir_all(dir).map_err(storage)?;
         }
         let bytes = serde_json::to_vec(archive).map_err(storage)?;
+        // 读取缓存由文件长度和修改时间识别；先失效，避免原子替换前后落在同一时间粒度时读到旧页。
+        if let Ok(mut cache) = self.view_cache.lock() {
+            *cache = None;
+        }
         // 半途失败不破坏上一份归档：先写临时文件再原子替换。
         let temp = path.with_extension("tmp");
         fs::write(&temp, bytes).map_err(storage)?;
-        fs::rename(temp, path).map_err(storage)
+        fs::rename(temp, path).map_err(storage)?;
+        if let Ok(mut cache) = self.view_cache.lock() {
+            *cache = None;
+        }
+        Ok(())
     }
 
     /// 已采集的关卡清单，按最近采集时间倒序。
@@ -250,39 +485,138 @@ impl CommentCollector {
             if path.extension().and_then(|ext| ext.to_str()) != Some("json") {
                 continue;
             }
-            let Ok(bytes) = fs::read(&path) else {
+            let level_id = path
+                .file_stem()
+                .and_then(|stem| stem.to_str())
+                .unwrap_or_default();
+            if !valid_level_id(level_id) {
                 continue;
-            };
-            if let Ok(archive) = serde_json::from_slice::<CommentArchive>(&bytes) {
+            }
+            let parsed = fs::read(&path)
+                .map_err(storage)
+                .and_then(|bytes| self.parse_archive(level_id, &bytes));
+            if let Ok(archive) = parsed {
                 out.push(ArchiveSummary {
                     level_id: archive.level.level_id,
                     level_name: archive.level.level_name,
                     cover_url: archive.level.cover_url,
                     updated_at: archive.updated_at,
                     count: archive.comments.len() as u32,
+                    collection_state: archive.collection_state,
+                    needs_recollect: false,
                 });
                 continue;
             }
-            // 占位只给"确实是 JSON、但结构/版本对不上"的文件留：
-            // 真损坏的文件没有任何可展示的信息，列出来只会变成一张点不开的谜之卡片。
-            if serde_json::from_slice::<serde_json::Value>(&bytes).is_err() {
-                continue;
-            }
+            // 即使 JSON 损坏也保留入口，否则用户无法从界面重新采集。
             out.push(ArchiveSummary {
-                // 内容不可信时文件名是唯一可靠的关卡 id。
-                level_id: path
-                    .file_stem()
-                    .and_then(|stem| stem.to_str())
-                    .unwrap_or_default()
-                    .to_owned(),
+                level_id: level_id.to_owned(),
                 level_name: String::new(),
                 cover_url: String::new(),
                 updated_at: modified_at(&path),
                 count: 0,
+                collection_state: CollectionState::Unknown,
+                needs_recollect: true,
             });
         }
         out.sort_by_key(|item| std::cmp::Reverse(item.updated_at));
         Ok(out)
+    }
+
+    /// Return only the fields needed to select a local archive from another plugin.
+    pub fn service_archives(&self) -> Result<Vec<CommentArchiveServiceSummary>, PluginFailure> {
+        let mut summaries = self
+            .archives()?
+            .into_iter()
+            .filter(|summary| !summary.needs_recollect)
+            .map(|summary| CommentArchiveServiceSummary {
+                level_id: summary.level_id,
+                level_name: summary.level_name,
+                updated_at: summary.updated_at,
+                count: summary.count,
+            })
+            .collect::<Vec<_>>();
+        summaries.truncate(10_000);
+        Ok(summaries)
+    }
+
+    fn favorites_path(&self) -> PathBuf {
+        self.root.join("favorites.json")
+    }
+
+    fn read_favorites(&self) -> Result<Vec<FavoriteLevel>, PluginFailure> {
+        let path = self.favorites_path();
+        let bytes = match fs::read(path) {
+            Ok(bytes) => bytes,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(Vec::new()),
+            Err(error) => return Err(storage(error)),
+        };
+        let file: FavoritesFile = serde_json::from_slice(&bytes)
+            .map_err(|_| PluginFailure::LocalData("本地收藏列表无法读取".into()))?;
+        if file.schema_version != FAVORITES_SCHEMA_VERSION
+            || file.items.len() > MAX_FAVORITES
+            || file
+                .items
+                .iter()
+                .any(|item| !valid_level_id(&item.level_id))
+        {
+            return Err(PluginFailure::LocalData("本地收藏列表格式不受支持".into()));
+        }
+        Ok(file.items)
+    }
+
+    fn save_favorites(&self, items: Vec<FavoriteLevel>) -> Result<(), PluginFailure> {
+        let path = self.favorites_path();
+        let bytes = serde_json::to_vec(&FavoritesFile {
+            schema_version: FAVORITES_SCHEMA_VERSION,
+            items,
+        })
+        .map_err(storage)?;
+        let temp = path.with_extension("tmp");
+        fs::write(&temp, bytes).map_err(storage)?;
+        fs::rename(temp, path).map_err(storage)
+    }
+
+    /// 列出当前安装的插件在本机保存的奇域收藏。
+    pub fn favorites(&self) -> Result<Vec<FavoriteLevel>, PluginFailure> {
+        self.read_favorites()
+    }
+
+    /// 切换一个关卡的本地收藏状态，返回切换后的状态。
+    pub fn toggle_favorite(&self, level_id: &str) -> Result<bool, PluginFailure> {
+        if !valid_level_id(level_id) {
+            return Err(PluginFailure::InvalidInput);
+        }
+        let _guard = self
+            .favorites_lock
+            .lock()
+            .map_err(|_| PluginFailure::Other("本地收藏暂不可用".into()))?;
+        let mut items = self.read_favorites()?;
+        if let Some(index) = items.iter().position(|item| item.level_id == level_id) {
+            items.remove(index);
+            self.save_favorites(items)?;
+            return Ok(false);
+        }
+        if items.len() >= MAX_FAVORITES {
+            return Err(PluginFailure::Other("本地收藏已达到数量上限".into()));
+        }
+        let archive = self
+            .archive(level_id)?
+            .ok_or_else(|| PluginFailure::LocalData("请先打开或采集该关卡".into()))?;
+        let added_at = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(storage)?
+            .as_secs();
+        items.insert(
+            0,
+            FavoriteLevel {
+                level_id: archive.level.level_id,
+                level_name: archive.level.level_name,
+                cover_url: archive.level.cover_url,
+                added_at,
+            },
+        );
+        self.save_favorites(items)?;
+        Ok(true)
     }
 
     /// 采集一次并并入本地归档，返回合并后的归档。
@@ -301,7 +635,10 @@ impl CommentCollector {
         query: CommentQuery,
         mut progress: F,
     ) -> Result<CommentArchive, PluginFailure> {
-        let _guard = self.collecting.try_lock().map_err(|_| PluginFailure::Busy)?;
+        let _guard = self
+            .collecting
+            .try_lock()
+            .map_err(|_| PluginFailure::Busy)?;
         if !valid_level_id(&query.level_id) {
             return Err(PluginFailure::InvalidInput);
         }
@@ -310,25 +647,54 @@ impl CommentCollector {
             .duration_since(UNIX_EPOCH)
             .map_err(storage)?
             .as_secs();
-        let mut level = self.bbs.level(&query.level_id).await?;
+        let mut archive = match self.archive(&query.level_id) {
+            Ok(Some(archive)) => archive,
+            Ok(None) | Err(PluginFailure::LocalData(_)) => {
+                let level = LevelInfo {
+                    level_id: query.level_id.clone(),
+                    ..LevelInfo::default()
+                };
+                CommentArchive::empty(level)
+            }
+            Err(error) => return Err(error),
+        };
+        // 一旦用户启动重新采集，就直接用新归档替换无法读取的旧文件；不创建备份。
+        // 先持久化进行中状态，连关卡信息请求失败时也不会留下过期的“已完成”标记。
+        self.checkpoint(&mut archive, Vec::new(), started_at, 0, "正在获取关卡信息")?;
+        let mut level = match self.bbs.level(&query.level_id).await {
+            Ok(level) => level,
+            Err(error) => {
+                self.checkpoint(
+                    &mut archive,
+                    Vec::new(),
+                    started_at,
+                    0,
+                    &format!("获取关卡信息失败：{error}；请重新采集"),
+                )?;
+                return Err(error);
+            }
+        };
         if level.level_id.is_empty() {
             level.level_id = query.level_id.clone();
         }
-        let mut archive = self
-            .archive(&query.level_id)?
-            .unwrap_or_else(|| CommentArchive::empty(level.clone()));
+        archive.level = level.clone();
+        self.checkpoint(&mut archive, Vec::new(), started_at, 0, "本次采集尚未完成")?;
         info!("开始采集评论");
 
         let mut cursor: Option<serde_json::Value> = None;
         let mut pages = 0u32;
         let mut fetched = 0u32;
-        // 是否撞上页数上限而停（而不是"官方说没有更多了"）。
-        let mut truncated = false;
         // 距上次落盘新抓到的评论；检查点与收尾都从这里取。
         let mut pending = Vec::new();
         loop {
             if self.cancel.load(Ordering::SeqCst) {
-                let _ = self.checkpoint(&mut archive, std::mem::take(&mut pending), started_at);
+                self.checkpoint(
+                    &mut archive,
+                    std::mem::take(&mut pending),
+                    started_at,
+                    pages,
+                    "采集已取消，已抓取部分已保留",
+                )?;
                 info!("采集已取消");
                 return Err(cancelled());
             }
@@ -339,8 +705,13 @@ impl CommentCollector {
             {
                 Ok(page) => page,
                 Err(error) => {
-                    // 尽力保住已抓到的页；落盘本身失败也不该盖掉真正的失败原因。
-                    let _ = self.checkpoint(&mut archive, std::mem::take(&mut pending), started_at);
+                    self.checkpoint(
+                        &mut archive,
+                        std::mem::take(&mut pending),
+                        started_at,
+                        pages,
+                        &format!("采集失败：{error}；已抓取部分已保留"),
+                    )?;
                     warn!(
                         code = error.code(),
                         page = pages,
@@ -359,40 +730,53 @@ impl CommentCollector {
                 fetched,
             });
             debug!(page = pages, fetched, "抓取一页评论");
-            // `has_more` 为真但游标空转时必须停下，否则会反复翻同一页。
-            if !page.more() || page.next().is_empty() {
+            if !page.more() {
                 break;
             }
-            // 页数上限只是官方 `has_more` 异常时的兜底。撞上它属于异常，
-            // 不能和"官方说抓完了"混成同一个出口，否则截断了也没人知道。
+            if page.next().is_empty() {
+                self.checkpoint(
+                    &mut archive,
+                    std::mem::take(&mut pending),
+                    started_at,
+                    pages,
+                    "官方接口表示还有评论，但没有提供下一页游标；归档未完成",
+                )?;
+                return Err(PluginFailure::InvalidResponse);
+            }
             if pages >= MAX_PAGES {
-                truncated = true;
-                break;
+                let message =
+                    format!("翻到 {MAX_PAGES} 页上限仍未结束，可能有遗漏；已抓取部分已保留");
+                self.checkpoint(
+                    &mut archive,
+                    std::mem::take(&mut pending),
+                    started_at,
+                    pages,
+                    &message,
+                )?;
+                warn!(pages, "翻到页数上限，归档未完成");
+                return Err(PluginFailure::Other(message));
             }
             cursor = page.cursor().cloned();
             if pages.is_multiple_of(CHECKPOINT_PAGES) {
-                self.checkpoint(&mut archive, std::mem::take(&mut pending), started_at)
-                    .map_err(|error| {
-                        warn!(reason = %error, "检查点落盘失败");
-                        error
-                    })?;
+                self.checkpoint(
+                    &mut archive,
+                    std::mem::take(&mut pending),
+                    started_at,
+                    pages,
+                    "本次采集尚未完成",
+                )
+                .map_err(|error| {
+                    warn!(reason = %error, "检查点落盘失败");
+                    error
+                })?;
             }
             tokio::time::sleep(PAGE_DELAY).await;
         }
         archive.merge(level, started_at, pages, pending);
         self.save(&archive)?;
-        if truncated {
-            // 数据已经落盘（上面 save 过了），这里只负责说清楚"可能没抓完"——
-            // 把撞上限当成一次正常完成会静默吞掉遗漏。
-            warn!(pages, "翻到页数上限，可能有遗漏");
-            return Err(PluginFailure::Other(format!(
-                "翻到 {MAX_PAGES} 页上限仍未结束，可能有遗漏；已抓到的部分已存入归档"
-            )));
-        }
         info!(pages, fetched, total = archive.comments.len(), "采集完成");
         Ok(archive)
     }
-
 }
 
 #[derive(Debug, Clone)]

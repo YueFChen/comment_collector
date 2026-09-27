@@ -3,17 +3,17 @@
   "id": "comment_collector",
   "name": "奇域评论采集器",
   "version": "0.1.0",
-  "description": "无需登录，采集奇域关卡公开评论并管理本地归档。",
+  "description": "无需登录，采集奇域关卡公开评论，并管理本地归档与收藏。",
   "icon": "message-circle",
   "hostCompatibility": {
-    "minCoreVersion": "0.1.0",
+    "minCoreVersion": "0.1.2",
     "maxCoreVersionExclusive": "1.0.0",
     "protocol": { "minVersion": "1.0.0", "maxVersionExclusive": "2.0.0" }
   },
   "platform": { "os": "windows", "architecture": "x86_64", "abi": "msvc" },
   "ui": {
     "entry": "ui/index.html",
-    "bridgeCompatibility": { "minVersion": "1.0.0", "maxVersionExclusive": "2.0.0" },
+    "bridgeCompatibility": { "minVersion": "1.1.0", "maxVersionExclusive": "2.0.0" },
     "integrations": ["theme.followHost"],
     "contributions": [
       { "id": "main", "kind": "activity", "title": "奇域评论采集器", "icon": "message-circle", "defaultOrder": 400 }
@@ -21,5 +21,13 @@
   },
   "backend": { "entry": "backend/wonderland-comment-collector.exe", "transport": "stdio-ndjson-v1" },
   "contract": "contract.json",
-  "capabilities": ["network.public", "files.export", "files.reveal_own"]
+  "capabilities": ["network.public", "files.export", "files.reveal_own"],
+  "networkPublicHosts": ["bbs-api.miyoushe.com"],
+  "provides": [
+    {
+      "id": "wonderland.comments.archive",
+      "version": "1.0.0",
+      "methods": ["service_archives", "archive_page"]
+    }
+  ]
 }

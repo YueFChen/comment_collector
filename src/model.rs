@@ -8,9 +8,20 @@ use serde::{Deserialize, Serialize};
 
 /// 本地归档的 schema 版本。
 ///
-/// 改动归档里的字段时必须同时把它加一：旧归档会被**明确拒绝**并要求重新采集，
-/// 而不是解析出半份数据（读取端先看版本、再看结构，见 `CommentCollector::archive`）。
-pub const ARCHIVE_VERSION: u32 = 1;
+/// 改动归档里的字段时必须同时把它加一。读取端先检查版本，再解析完整结构；
+/// 当前可读取 v1 并在内存中迁移到 v2，无法识别的版本或损坏结构会提示重新采集。
+pub const ARCHIVE_VERSION: u32 = 2;
+
+/// 最近一次采集是否完整结束。旧版归档没有此信息。
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(ts_rs::TS))]
+#[serde(rename_all = "snake_case")]
+pub enum CollectionState {
+    #[default]
+    Unknown,
+    Complete,
+    Partial,
+}
 
 /// 一次采集的输入。
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -88,6 +99,12 @@ pub struct CommentArchive {
     pub fetch_count: u32,
     /// 最近一次采集翻过的页数。
     pub last_pages: u32,
+    /// 最近一次采集的完成状态；v1 归档读取时默认为 unknown。
+    #[serde(default)]
+    pub collection_state: CollectionState,
+    /// 最近一次未完成采集的原因。
+    #[serde(default)]
+    pub collection_message: String,
     /// 主评论与楼中楼按采集顺序展开存放。
     pub comments: Vec<CommentItem>,
 }
@@ -108,6 +125,123 @@ pub struct ArchiveSummary {
     pub updated_at: u64,
     /// 归档内评论总条数（含楼中楼）。
     pub count: u32,
+    pub collection_state: CollectionState,
+    /// 文件存在但不能作为归档读取，需要重新采集。
+    pub needs_recollect: bool,
+}
+
+/// 用户在本机标记的奇域关卡收藏项。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(ts_rs::TS))]
+pub struct FavoriteLevel {
+    pub level_id: String,
+    pub level_name: String,
+    pub cover_url: String,
+    /// 加入本地收藏的时间（Unix 秒）。
+    #[cfg_attr(feature = "bindings", ts(type = "number"))]
+    pub added_at: u64,
+}
+
+/// UI 需要的关卡信息与采集状态，不包含评论正文。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(ts_rs::TS))]
+pub struct ArchiveOverview {
+    pub level: LevelInfo,
+    #[cfg_attr(feature = "bindings", ts(type = "number"))]
+    pub updated_at: u64,
+    pub fetch_count: u32,
+    pub last_pages: u32,
+    pub collection_state: CollectionState,
+    pub collection_message: String,
+    pub comment_count: u32,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(ts_rs::TS))]
+pub struct CommentGroup {
+    pub main: CommentItem,
+    pub subs: Vec<CommentItem>,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(ts_rs::TS))]
+#[serde(rename_all = "camelCase")]
+pub enum ArchiveFilter {
+    All,
+    Recommend,
+    NotRecommend,
+    Owner,
+}
+
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(ts_rs::TS))]
+#[serde(rename_all = "camelCase")]
+pub enum ArchiveSort {
+    Default,
+    Newest,
+    Oldest,
+    Likes,
+    Floor,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(ts_rs::TS))]
+pub struct ArchiveViewQuery {
+    pub level_id: String,
+    pub offset: u32,
+    pub limit: u32,
+    pub filter: ArchiveFilter,
+    pub sort: ArchiveSort,
+    pub keyword: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(ts_rs::TS))]
+pub struct ArchiveViewPage {
+    pub overview: ArchiveOverview,
+    pub total_groups: u32,
+    pub offset: u32,
+    pub groups: Vec<CommentGroup>,
+}
+
+/// Minimal summary crossing the plugin service boundary; it excludes the image URL.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(ts_rs::TS))]
+pub struct CommentArchiveServiceSummary {
+    pub level_id: String,
+    pub level_name: String,
+    #[cfg_attr(feature = "bindings", ts(type = "number"))]
+    pub updated_at: u64,
+    pub count: u32,
+}
+
+/// A bounded, privacy-reduced page for other plugins that consume the archive service.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(ts_rs::TS))]
+pub struct CommentArchiveServiceItem {
+    pub floor_id: String,
+    pub nickname: String,
+    pub content: String,
+    pub is_recommend: Option<bool>,
+    pub like_count: u32,
+    pub reply_count: u32,
+    #[cfg_attr(feature = "bindings", ts(type = "number"))]
+    pub created_at: i64,
+    pub is_sub: bool,
+    pub reply_to: String,
+}
+
+/// One page of a local comment archive, with identifiers and IP region intentionally omitted.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(ts_rs::TS))]
+pub struct CommentArchivePage {
+    pub level_id: String,
+    pub level_name: String,
+    #[cfg_attr(feature = "bindings", ts(type = "number"))]
+    pub updated_at: u64,
+    pub total_count: u32,
+    pub offset: u32,
+    pub comments: Vec<CommentArchiveServiceItem>,
 }
 
 /// 采集进度，经宿主事件推给界面。
@@ -149,6 +283,8 @@ impl CommentArchive {
             updated_at: 0,
             fetch_count: 0,
             last_pages: 0,
+            collection_state: CollectionState::Unknown,
+            collection_message: String::new(),
             comments: Vec::new(),
         }
     }
@@ -188,11 +324,27 @@ impl CommentArchive {
         self.updated_at = fetched_at;
         self.fetch_count += 1;
         self.last_pages = pages;
+        self.collection_state = CollectionState::Complete;
+        self.collection_message.clear();
         self.merge_comments(incoming);
     }
 
     /// 主评论条数。
     pub fn main_count(&self) -> u32 {
         self.comments.iter().filter(|item| !item.is_sub).count() as u32
+    }
+}
+
+impl From<&CommentArchive> for ArchiveOverview {
+    fn from(archive: &CommentArchive) -> Self {
+        Self {
+            level: archive.level.clone(),
+            updated_at: archive.updated_at,
+            fetch_count: archive.fetch_count,
+            last_pages: archive.last_pages,
+            collection_state: archive.collection_state,
+            collection_message: archive.collection_message.clone(),
+            comment_count: archive.comments.len().min(u32::MAX as usize) as u32,
+        }
     }
 }

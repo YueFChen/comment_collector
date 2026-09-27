@@ -71,9 +71,18 @@ fetch_count: number,
  */
 last_pages: number,
 /**
+ * 最近一次采集的完成状态；v1 归档读取时默认为 unknown。
+ */
+collection_state: CollectionState,
+/**
+ * 最近一次未完成采集的原因。
+ */
+collection_message: string,
+/**
  * 主评论与楼中楼按采集顺序展开存放。
  */
 comments: Array<CommentItem>, };
+export type CollectionState = "unknown" | "complete" | "partial";
 export type ArchiveSummary = { level_id: string, level_name: string,
 /**
  * 关卡封面（官方统一 16:9）；列表卡片用它做背景图。
@@ -86,7 +95,25 @@ updated_at: number,
 /**
  * 归档内评论总条数（含楼中楼）。
  */
-count: number, };
+count: number, collection_state: CollectionState,
+/**
+ * 文件存在但不能作为归档读取，需要重新采集。
+ */
+needs_recollect: boolean, };
+export type FavoriteLevel = { level_id: string, level_name: string, cover_url: string,
+/**
+ * 加入本地收藏的时间（Unix 秒）。
+ */
+added_at: number, };
+export type ArchiveOverview = { level: LevelInfo, updated_at: number, fetch_count: number, last_pages: number, collection_state: CollectionState, collection_message: string, comment_count: number, };
+export type CommentGroup = { main: CommentItem, subs: Array<CommentItem>, };
+export type ArchiveFilter = "all" | "recommend" | "notRecommend" | "owner";
+export type ArchiveSort = "default" | "newest" | "oldest" | "likes" | "floor";
+export type ArchiveViewQuery = { level_id: string, offset: number, limit: number, filter: ArchiveFilter, sort: ArchiveSort, keyword: string, };
+export type ArchiveViewPage = { overview: ArchiveOverview, total_groups: number, offset: number, groups: Array<CommentGroup>, };
+export type CommentArchiveServiceSummary = { level_id: string, level_name: string, updated_at: number, count: number, };
+export type CommentArchiveServiceItem = { floor_id: string, nickname: string, content: string, is_recommend: boolean | null, like_count: number, reply_count: number, created_at: number, is_sub: boolean, reply_to: string, };
+export type CommentArchivePage = { level_id: string, level_name: string, updated_at: number, total_count: number, offset: number, comments: Array<CommentArchiveServiceItem>, };
 export type CollectProgress = {
 /**
  * 已完成的页数。

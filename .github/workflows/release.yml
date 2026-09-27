@@ -1,0 +1,104 @@
+name: Plugin release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  release:
+    runs-on: windows-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout the pinned Core SDK source
+        shell: pwsh
+        env:
+          CORE_REF: 8db29bd58817db973fc5030ba9e920a0c182e93b
+        run: |
+          $ErrorActionPreference = 'Stop'
+          git clone --filter=blob:none --no-checkout https://github.com/YueFChen/Wonderland_Assistant.git core
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git -C core fetch --depth=1 origin $env:CORE_REF
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          git -C core checkout --detach $env:CORE_REF
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - uses: actions/checkout@v7
+        with:
+          path: core/plugins/comment_collector
+          persist-credentials: false
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24.21.0
+          package-manager-cache: false
+
+      - name: Install pnpm
+        run: npm install --global pnpm@11.27.0
+
+      - uses: dtolnay/rust-toolchain@1.98.1
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: Install locked plugin dependencies
+        run: pnpm install --frozen-lockfile
+        working-directory: core/plugins/comment_collector
+
+      - name: Check plugin UI
+        run: pnpm run check
+        working-directory: core/plugins/comment_collector
+
+      - name: Check Rust formatting
+        run: cargo fmt --all -- --check
+        working-directory: core/plugins/comment_collector
+
+      - name: Run Rust clippy
+        run: cargo clippy --all-targets --all-features --locked -- -D warnings
+        working-directory: core/plugins/comment_collector
+
+      - name: Run Rust tests
+        run: cargo test --locked
+        working-directory: core/plugins/comment_collector
+
+      - name: Build release package
+        run: pnpm run build:release
+        working-directory: core/plugins/comment_collector
+
+      - name: Create signed update manifest
+        shell: pwsh
+        env:
+          PLUGIN_UPDATE_SIGNING_KEY: ${{ secrets.PLUGIN_UPDATE_SIGNING_KEY }}
+          PLUGIN_UPDATE_SIGNING_PUBLIC_KEY: ${{ vars.PLUGIN_UPDATE_SIGNING_PUBLIC_KEY }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $pluginRoot = 'core/plugins/comment_collector'
+          $manifest = Get-Content -Raw "$pluginRoot/package/manifest.json" | ConvertFrom-Json
+          $packagePath = "$pluginRoot/target/$($manifest.id)-$($manifest.version)-windows-$($manifest.platform.architecture).wplug"
+          $updatePath = "$pluginRoot/target/release/$($manifest.id)-update.json"
+          node "$pluginRoot/scripts/create-update-manifest.mjs" `
+            "$pluginRoot/package/manifest.json" `
+            $packagePath `
+            $env:GITHUB_REPOSITORY `
+            $env:GITHUB_REF_NAME `
+            $updatePath
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Publish GitHub Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $pluginRoot = 'core/plugins/comment_collector'
+          $manifest = Get-Content -Raw "$pluginRoot/package/manifest.json" | ConvertFrom-Json
+          $packagePath = "$pluginRoot/target/$($manifest.id)-$($manifest.version)-windows-$($manifest.platform.architecture).wplug"
+          $updatePath = "$pluginRoot/target/release/$($manifest.id)-update.json"
+          gh release create $env:GITHUB_REF_NAME $packagePath $updatePath `
+            --repo $env:GITHUB_REPOSITORY `
+            --title "$($manifest.name) v$($manifest.version)" `
+            --generate-notes --verify-tag
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

@@ -313,8 +313,18 @@ fn expand(out: &mut Vec<CommentItem>, reply: &ReplyWire, parent_id: &str, is_sub
 /// 匿名社区客户端。
 #[async_trait]
 pub trait PublicHttpClient: Send + Sync {
-    async fn get_bytes(&self, url: &str, headers: &[(&str, &str)], query: &[(String, String)]) -> Result<Vec<u8>, PluginFailure>;
-    async fn post_json(&self, url: &str, headers: &[(&str, &str)], body: &str) -> Result<Vec<u8>, PluginFailure>;
+    async fn get_bytes(
+        &self,
+        url: &str,
+        headers: &[(&str, &str)],
+        query: &[(String, String)],
+    ) -> Result<Vec<u8>, PluginFailure>;
+    async fn post_json(
+        &self,
+        url: &str,
+        headers: &[(&str, &str)],
+        body: &str,
+    ) -> Result<Vec<u8>, PluginFailure>;
 }
 
 pub struct Bbs {
