@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - "v*"
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: Existing version tag to resume after a failed pre-release workflow.
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -11,6 +17,8 @@ permissions:
 jobs:
   release:
     runs-on: windows-latest
+    env:
+      RELEASE_TAG: ${{ github.event.inputs.release_tag || github.ref_name }}
     permissions:
       contents: write
     steps:
@@ -30,6 +38,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           path: core/plugins/comment_collector
+          ref: ${{ github.event.inputs.release_tag || github.ref }}
           persist-credentials: false
 
       - uses: actions/setup-node@v7
@@ -39,6 +48,10 @@ jobs:
 
       - name: Install pnpm
         run: npm install --global pnpm@11.27.0
+
+      - name: Install shared Core UI SDK workspace dependencies
+        run: pnpm install --filter '@wonderland/plugin-ui-sdk...' --frozen-lockfile
+        working-directory: core
 
       - uses: dtolnay/rust-toolchain@1.98.1
         with:
@@ -83,7 +96,7 @@ jobs:
             "$pluginRoot/package/manifest.json" `
             $packagePath `
             $env:GITHUB_REPOSITORY `
-            $env:GITHUB_REF_NAME `
+            $env:RELEASE_TAG `
             $updatePath
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
@@ -97,7 +110,7 @@ jobs:
           $manifest = Get-Content -Raw "$pluginRoot/package/manifest.json" | ConvertFrom-Json
           $packagePath = "$pluginRoot/target/$($manifest.id)-$($manifest.version)-windows-$($manifest.platform.architecture).wplug"
           $updatePath = "$pluginRoot/target/release/$($manifest.id)-update.json"
-          gh release create $env:GITHUB_REF_NAME $packagePath $updatePath `
+          gh release create $env:RELEASE_TAG $packagePath $updatePath `
             --repo $env:GITHUB_REPOSITORY `
             --title "$($manifest.name) v$($manifest.version)" `
             --generate-notes --verify-tag
