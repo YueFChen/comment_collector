@@ -2,11 +2,11 @@
 
 插件发布使用 GitHub Release，并附带 `.wplug` 安装包和 Ed25519 签名的 `comment_collector-update.json`。在线目录只保存插件身份、稳定更新清单地址和签名公钥；目录 CI 会下载最新 Release 并验证签名和安装包。
 
-## 当前候选状态
+## 版本与构建基线
 
-- 插件版本在 Rust workspace、根 `package.json`、`ui/package.json` 和 `package/manifest.json` 中保持一致；当前候选为 `0.1.0`。
-- 远端仓库目前没有 Release、版本标签或 `PLUGIN_UPDATE_SIGNING_KEY` secret；本地候选已新增发布工作流，尚未合入远端 `main`。
-- 工作流构建时固定检出 Core 提交 `8db29bd58817db973fc5030ba9e920a0c182e93b`，该提交提供插件 SDK 0.1.3。
+- 插件版本在 Rust workspace、根 `package.json`、`ui/package.json` 和 `package/manifest.json` 中保持一致；当前版本为 `0.1.1`。
+- 仓库已配置签名发布；普通版本更新沿用现有 `PLUGIN_UPDATE_SIGNING_KEY` 和 `PLUGIN_UPDATE_SIGNING_PUBLIC_KEY`，不重新生成密钥。
+- 工作流构建时固定检出 Core 提交 `dc988400c4d66ec1c25a5221583efaf80c80db0b`，该提交提供插件 SDK 0.1.8。
 - 发布标签必须是 `v<manifest.version>`，例如 `v0.1.0`。
 
 ## 首次发布

@@ -1,6 +1,6 @@
 # Core 0.1.8 兼容说明
 
-本插件开发版本为 **0.1.1**，最低 Core 为 **0.1.8**。构建前运行 `node scripts/check-core-compatibility.mjs`；构建脚本会自动检查此条件。旧 Core 0.1.7 不识别本次 manifest 扩展，不能安装本次新包。
+本插件版本为 **0.1.1**，最低 Core 为 **0.1.8**。构建前运行 `node scripts/check-core-compatibility.mjs`；构建脚本会自动检查此条件。旧 Core 0.1.7 不识别本次 manifest 扩展，不能安装本次新包。
 
 远程访问：**已声明**。
 
@@ -10,4 +10,4 @@
 
 `backend.supportsServiceContext: true` 表示后端会原样回传每次调用的上下文。SDK 插件使用每次 dispatch 收到的 `HostClient`；不要缓存一个客户端跨不同请求处理文件操作。未声明远程支持的插件不会出现在共享列表，Core 也会拒绝直接远程调用。
 
-本次是本地开发适配，版本号不代表已经发布。发布顺序为先推送并发布配套 Core，再按插件仓库的检查、签名和发布流程发布插件。已登记插件的普通升级不需要修改 Catalog 身份记录。
+发布顺序为先发布配套 Core，再按插件仓库的检查、签名和发布流程发布插件。已登记插件的普通升级不需要修改 Catalog 身份记录。

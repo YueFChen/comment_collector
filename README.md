@@ -35,7 +35,7 @@ node scripts/build-plugin.mjs --release --archive
 
 Debug 包位于 `target/comment-collector-plugin`；Release 包名为 `comment_collector-{版本}-windows-x86_64.wplug`。Release 命令会构建优化版后端和 UI，并生成覆盖包内文件的 SHA-256 `checksums.json`。
 
-插件支持 Core `[0.1.2, 1.0.0)` 和插件 UI Bridge `[1.1.0, 2.0.0)`。Debug Core 可安装 Debug 目录包；Release Core 安装经过校验的 `.wplug` 包。插件 UI 在当前 Core 的 Debug 和 Release 构建中均可使用。
+插件支持 Core `[0.1.8, 1.0.0)` 和插件 UI Bridge `[1.1.0, 2.0.0)`。Debug Core 可安装 Debug 目录包；Release Core 安装经过校验的 `.wplug` 包。插件 UI 在当前 Core 的 Debug 和 Release 构建中均可使用。
 
 ## 数据与导出
 
