@@ -864,3 +864,15 @@
   font-variant-numeric: tabular-nums;
   text-align: center;
 }
+
+/* Only remote phone layouts change; the native workspace keeps its existing layout. */
+@media (max-width: 600px) {
+  html[data-wonderland-remote='true'] .cc { padding-inline: 12px; }
+  html[data-wonderland-remote='true'] .cc-level { flex-direction: column; padding: 12px; }
+  html[data-wonderland-remote='true'] .cc-cover { width: 100%; }
+  html[data-wonderland-remote='true'] .cc-recent-grid { grid-template-columns: minmax(0, 1fr); }
+  html[data-wonderland-remote='true'] .cc-field--grow,
+  html[data-wonderland-remote='true'] .cc-search { min-width: 0; flex-basis: 100%; }
+  html[data-wonderland-remote='true'] .cc-panel { padding: 12px; }
+  html[data-wonderland-remote='true'] .cc button { min-height: 36px; }
+}

@@ -21,7 +21,7 @@
 
 ## 构建
 
-使用 Core 0.1.3 源码（提供插件 SDK 0.1.3），把本插件检出到 `plugins/comment_collector` 后，从插件目录运行：
+使用 Core 0.1.8 源码（提供插件 SDK 0.1.8），把本插件检出到 `plugins/comment_collector` 后，从插件目录运行：
 
 ```powershell
 # Debug 目录包，供 Debug Core 本地安装
@@ -47,3 +47,7 @@ Debug 包位于 `target/comment-collector-plugin`；Release 包名为 `comment_c
 - `package/contract.json`：归档查询、采集、导出及进度事件的数据契约。
 - `ui/`：插件页面及宿主 API 适配。
 - `src/lib.rs`、`src/bbs.rs`、`src/export.rs`：本地归档、匿名社区接口适配和导出逻辑。
+
+## Core 0.1.8 与远程访问
+
+见 [CORE-COMPATIBILITY.md](CORE-COMPATIBILITY.md)，包括最低版本、远程声明和发布顺序。

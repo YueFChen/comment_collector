@@ -2,11 +2,11 @@
   "manifestVersion": 2,
   "id": "comment_collector",
   "name": "奇域评论采集器",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "无需登录，采集奇域关卡公开评论，并管理本地归档与收藏。",
   "icon": "message-circle",
   "hostCompatibility": {
-    "minCoreVersion": "0.1.2",
+    "minCoreVersion": "0.1.8",
     "maxCoreVersionExclusive": "1.0.0",
     "protocol": { "minVersion": "1.0.0", "maxVersionExclusive": "2.0.0" }
   },
@@ -20,6 +20,7 @@
     ]
   },
   "backend": { "entry": "backend/wonderland-comment-collector.exe", "transport": "stdio-ndjson-v1", "supportsServiceContext": true },
+  "remoteAccess": true,
   "contract": "contract.json",
   "capabilities": ["network.public", "files.export", "files.reveal_own"],
   "networkPublicHosts": ["bbs-api.miyoushe.com"],

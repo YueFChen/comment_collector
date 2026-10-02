@@ -17,6 +17,9 @@ import type {
 } from './types.generated'
 import './host.css'
 
+// Presentation hint only; Core enforces remote authorization independently.
+document.documentElement.dataset.wonderlandRemote = String(new URLSearchParams(location.search).get('wonderlandClient') === 'web')
+
 const host = createPluginHostClient('comment_collector')
 let activeCollectId: string | null = null
 

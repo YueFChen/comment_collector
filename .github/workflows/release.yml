@@ -25,7 +25,7 @@ jobs:
       - name: Checkout the pinned Core SDK source
         shell: pwsh
         env:
-          CORE_REF: 8db29bd58817db973fc5030ba9e920a0c182e93b
+          CORE_REF: dc988400c4d66ec1c25a5221583efaf80c80db0b
         run: |
           $ErrorActionPreference = 'Stop'
           git clone --filter=blob:none --no-checkout https://github.com/YueFChen/Wonderland_Assistant.git core

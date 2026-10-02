@@ -1,3 +1,4 @@
+import './check-core-compatibility.mjs'
 import { createHash } from 'node:crypto'
 import { cp, mkdir, readdir, readFile, rename, rm, writeFile } from 'node:fs/promises'
 import { spawnSync } from 'node:child_process'
