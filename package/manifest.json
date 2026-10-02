@@ -19,7 +19,7 @@
       { "id": "main", "kind": "activity", "title": "奇域评论采集器", "icon": "message-circle", "defaultOrder": 400 }
     ]
   },
-  "backend": { "entry": "backend/wonderland-comment-collector.exe", "transport": "stdio-ndjson-v1" },
+  "backend": { "entry": "backend/wonderland-comment-collector.exe", "transport": "stdio-ndjson-v1", "supportsServiceContext": true },
   "contract": "contract.json",
   "capabilities": ["network.public", "files.export", "files.reveal_own"],
   "networkPublicHosts": ["bbs-api.miyoushe.com"],
