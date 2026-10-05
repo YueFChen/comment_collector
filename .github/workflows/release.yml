@@ -77,8 +77,16 @@ jobs:
         run: cargo test --locked
         working-directory: core/plugins/comment_collector
 
+      - name: Check generated UI bindings
+        run: cargo run --locked --features bindings --example generate_bindings -- --check
+        working-directory: core/plugins/comment_collector
+
       - name: Build release package
         run: pnpm run build:release
+        working-directory: core/plugins/comment_collector
+
+      - name: Check packaged backend protocol
+        run: node scripts/test-monitor-protocol.mjs target/comment-collector-release-package/backend/wonderland-comment-collector.exe
         working-directory: core/plugins/comment_collector
 
       - name: Create signed update manifest
@@ -113,5 +121,5 @@ jobs:
           gh release create $env:RELEASE_TAG $packagePath $updatePath `
             --repo $env:GITHUB_REPOSITORY `
             --title "$($manifest.name) v$($manifest.version)" `
-            --generate-notes --verify-tag
+            --notes-file "$pluginRoot/RELEASE-NOTES.md" --verify-tag
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

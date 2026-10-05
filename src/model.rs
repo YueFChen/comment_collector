@@ -9,8 +9,8 @@ use serde::{Deserialize, Serialize};
 /// 本地归档的 schema 版本。
 ///
 /// 改动归档里的字段时必须同时把它加一。读取端先检查版本，再解析完整结构；
-/// 当前可读取 v1 并在内存中迁移到 v2，无法识别的版本或损坏结构会提示重新采集。
-pub const ARCHIVE_VERSION: u32 = 2;
+/// 当前可读取 v1/v2 并在内存中迁移到 v3，无法识别的版本或损坏结构会提示重新采集。
+pub const ARCHIVE_VERSION: u32 = 3;
 
 /// 最近一次采集是否完整结束。旧版归档没有此信息。
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -51,7 +51,7 @@ pub struct LevelInfo {
 }
 
 /// 一条评论；主评论与楼中楼共用同一形状，用 [`CommentItem::is_sub`] 区分。
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 #[cfg_attr(feature = "bindings", derive(ts_rs::TS))]
 pub struct CommentItem {
     pub reply_id: String,
@@ -83,6 +83,14 @@ pub struct CommentItem {
     pub reply_to: String,
 }
 
+/// 最近一轮新增主评论的推荐统计；每轮替换，不保存历史记录。
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[cfg_attr(feature = "bindings", derive(ts_rs::TS))]
+pub struct NewCommentCounts {
+    pub recommended: u32,
+    pub not_recommended: u32,
+}
+
 /// 逐个关卡的长期归档。
 ///
 /// 官方只给滚动窗口，所以每次采集都并入同一份归档并按 `reply_id` 去重：
@@ -105,6 +113,9 @@ pub struct CommentArchive {
     /// 最近一次未完成采集的原因。
     #[serde(default)]
     pub collection_message: String,
+    /// 旧归档无最近新增统计，读取时不从历史数据推算。
+    #[serde(default)]
+    pub last_new_counts: Option<NewCommentCounts>,
     /// 主评论与楼中楼按采集顺序展开存放。
     pub comments: Vec<CommentItem>,
 }
@@ -128,6 +139,8 @@ pub struct ArchiveSummary {
     pub collection_state: CollectionState,
     /// 文件存在但不能作为归档读取，需要重新采集。
     pub needs_recollect: bool,
+    #[serde(default)]
+    pub last_new_counts: Option<NewCommentCounts>,
 }
 
 /// 用户在本机标记的奇域关卡收藏项。
@@ -285,6 +298,7 @@ impl CommentArchive {
             last_pages: 0,
             collection_state: CollectionState::Unknown,
             collection_message: String::new(),
+            last_new_counts: None,
             comments: Vec::new(),
         }
     }

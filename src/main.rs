@@ -5,10 +5,12 @@ use async_trait::async_trait;
 use base64::Engine as _;
 use serde_json::{Value, json};
 use wonderland_comment_collector::{
-    ArchiveOverview, ArchiveViewQuery, CommentCollector, CommentQuery, ExportFormat, ExportOutcome,
-    PublicHttpClient,
+    ArchiveOverview, ArchiveViewQuery, CollectionMode, CommentCollector, CommentQuery,
+    ExportFormat, ExportOutcome, MonitorConfig, PublicHttpClient,
 };
-use wonderland_plugin_sdk::{HostClient, PluginError, PluginFailure, RequestTracker, serve};
+use wonderland_plugin_sdk::{
+    HostClient, PluginError, PluginFailure, RequestTracker, serve_with_startup,
+};
 
 const CONTRACT: &str = include_str!("../package/contract.json");
 
@@ -40,12 +42,19 @@ fn run() -> Result<(), String> {
             .build()
             .map_err(|error| error.to_string())?,
     );
-    serve(
+    let startup_collector = collector.clone();
+    let startup_runtime = runtime.clone();
+    serve_with_startup(
         "comment_collector",
         env!("CARGO_PKG_VERSION"),
         CONTRACT,
+        move |host| {
+            // Keep the startup host, never a transient cross-plugin service context.
+            http.set_host(host);
+            let _runtime = startup_runtime.enter();
+            startup_collector.start_monitoring();
+        },
         move |host, method, params, request_id| {
-            http.set_host(host.clone());
             dispatch(
                 &host,
                 &collector,
@@ -79,6 +88,28 @@ fn dispatch(
     request_id: Option<String>,
 ) -> Result<Value, PluginFailure> {
     match method {
+        "monitor_add" => {
+            serde_json::to_value(collector.add_monitor(string_param(&params, "level_id")?)?)
+                .map_err(|_| PluginFailure::InvalidResponse)
+        }
+        "monitor_remove" => {
+            serde_json::to_value(collector.remove_monitor(string_param(&params, "level_id")?)?)
+                .map_err(|_| PluginFailure::InvalidResponse)
+        }
+        "monitor_config" => serde_json::to_value(collector.monitor_config()?)
+            .map_err(|_| PluginFailure::InvalidResponse),
+        "monitor_configure" => {
+            let config: MonitorConfig = value_param(&params, "config")?;
+            serde_json::to_value(collector.configure_monitor(config)?)
+                .map_err(|_| PluginFailure::InvalidResponse)
+        }
+        "monitor_status" => serde_json::to_value(collector.monitor_status()?)
+            .map_err(|_| PluginFailure::InvalidResponse),
+        "monitor_run" => {
+            let mode: CollectionMode = value_param(&params, "mode")?;
+            collector.request_monitor_run(string_param(&params, "level_id")?, mode)?;
+            Ok(Value::Null)
+        }
         "archives" => {
             serde_json::to_value(collector.archives()?).map_err(|_| PluginFailure::InvalidResponse)
         }
@@ -194,9 +225,9 @@ fn string_param<'a>(params: &'a Value, key: &str) -> Result<&'a str, PluginFailu
         .ok_or(PluginFailure::InvalidInput)
 }
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct CoreHttp {
-    host: RwLock<Option<HostClient>>,
+    host: Arc<RwLock<Option<HostClient>>>,
 }
 
 impl CoreHttp {
@@ -255,7 +286,22 @@ impl PublicHttpClient for CoreHttp {
         headers: &[(&str, &str)],
         query: &[(String, String)],
     ) -> Result<Vec<u8>, PluginFailure> {
-        self.request("GET", url, headers, query, None)
+        let client = self.clone();
+        let url = url.to_owned();
+        let headers: Vec<_> = headers
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+        let query = query.to_vec();
+        tokio::task::spawn_blocking(move || {
+            let headers: Vec<_> = headers
+                .iter()
+                .map(|(k, v)| (k.as_str(), v.as_str()))
+                .collect();
+            client.request("GET", &url, &headers, &query, None)
+        })
+        .await
+        .map_err(|e| PluginFailure::Transport(e.to_string()))?
     }
     async fn post_json(
         &self,
@@ -263,7 +309,22 @@ impl PublicHttpClient for CoreHttp {
         headers: &[(&str, &str)],
         body: &str,
     ) -> Result<Vec<u8>, PluginFailure> {
-        self.request("POST", url, headers, &[], Some(body))
+        let client = self.clone();
+        let url = url.to_owned();
+        let body = body.to_owned();
+        let headers: Vec<_> = headers
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+        tokio::task::spawn_blocking(move || {
+            let headers: Vec<_> = headers
+                .iter()
+                .map(|(k, v)| (k.as_str(), v.as_str()))
+                .collect();
+            client.request("POST", &url, &headers, &[], Some(&body))
+        })
+        .await
+        .map_err(|e| PluginFailure::Transport(e.to_string()))?
     }
 }
 

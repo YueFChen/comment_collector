@@ -6,10 +6,15 @@
 mod bbs;
 mod export;
 pub mod model;
+mod monitor;
+#[cfg(test)]
+mod monitor_tests;
+mod scan;
 #[cfg(test)]
 mod tests;
 
 pub use model::*;
+pub use monitor::{CollectionMode, MonitorConfig, MonitorLevelStatus, MonitorStatus};
 
 use std::{
     collections::HashMap,
@@ -17,32 +22,21 @@ use std::{
     path::PathBuf,
     sync::{
         Arc, Mutex as StdMutex,
-        atomic::{AtomicBool, Ordering},
+        atomic::{AtomicBool, AtomicU32, Ordering},
     },
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
+use bbs::Bbs;
 pub use bbs::PublicHttpClient;
-use bbs::{Bbs, MAX_PAGES};
 use tokio::sync::Mutex;
-use tracing::{debug, info, instrument, warn};
+use tracing::{instrument, warn};
 use wonderland_plugin_sdk::PluginFailure;
-
-/// 翻页间隔。
-///
-/// 实测（2026-09-19，关卡 7257762194，73 页 / 1468 条）：单页请求本身约 114ms，
-/// 而官方把单页上限**硬卡在 20 条**——`size` 给 5 / 10 会被尊重，给 50 / 100 也只回 20。
-/// 所以加速唯有压缩这个间隔：400ms 时间隔占了单页总耗时的七成以上。
-///
-/// 端到端 A/B（同一关卡、同一时刻）：400ms → 37.4s，120ms → 17.1s，约 2.2 倍。
-/// 不取实测上限：无间隔连发 20 次、按 150ms 连翻 20 页都没被限流，但匿名接口被封没有申诉渠道，
-/// 留一倍余量按约 4 次/秒走。
-const PAGE_DELAY: Duration = Duration::from_millis(120);
 
 /// 检查点间隔：每抓这么多页就把已抓到的评论落一次盘。
 ///
 /// 链式游标跨会话不可用（下一页游标只存在于上一页的响应里），所以检查点**省不下翻页**——
-/// 它保的是**已经拿到的数据**：中途失败、取消或应用被关掉，都不必从头再抓一遍。
+/// 它保的是**已经拿到的数据**：中途失败、取消或应用被关掉时不丢已有内容；下次仍从首页安全重扫。
 const CHECKPOINT_PAGES: u32 = 10;
 /// 单页失败的重试次数（不含首次请求）。
 const PAGE_RETRIES: u32 = 2;
@@ -102,8 +96,13 @@ fn modified_at(path: &std::path::Path) -> u64 {
 pub struct CommentCollector {
     root: PathBuf,
     bbs: Bbs,
-    /// 单插件串行采集，避免并发写同一份归档；不阻塞读取与导出。
+    /// Only foreground requests share a cancellation flag. Background jobs have their own tokens.
     collecting: Mutex<()>,
+    level_locks: StdMutex<HashMap<String, Arc<Mutex<()>>>>,
+    monitor_config_lock: StdMutex<()>,
+    monitor: StdMutex<monitor::MonitorRuntime>,
+    monitor_started: AtomicBool,
+    active_jobs: AtomicU32,
     /// 取消标记：由宿主置位，采集循环在翻页间隙检查。
     cancel: Arc<AtomicBool>,
     /// 当前浏览关卡的解析结果，避免每次翻页重新读取整份 JSON。
@@ -153,6 +152,11 @@ impl CommentCollector {
             root,
             bbs: Bbs::new(http),
             collecting: Mutex::new(()),
+            level_locks: StdMutex::new(HashMap::new()),
+            monitor_config_lock: StdMutex::new(()),
+            monitor: StdMutex::new(monitor::MonitorRuntime::default()),
+            monitor_started: AtomicBool::new(false),
+            active_jobs: AtomicU32::new(0),
             cancel: Arc::new(AtomicBool::new(false)),
             view_cache: StdMutex::new(None),
             favorites_lock: StdMutex::new(()),
@@ -190,36 +194,6 @@ impl CommentCollector {
         self.cancel.store(true, Ordering::SeqCst);
     }
 
-    /// 取一页；网络类失败按指数退避重试，仍失败就把最后一次的错误抛出去。
-    ///
-    /// `attempts` 是出参，回填**实际发出的请求次数**：重试只发生在这里，所以只有这一层
-    /// 知道次数（Core 公共网络 POST 路径不重试也不落日志）。调用方放弃时用它写日志，
-    /// 失败链上才有「试了几次」这个数。
-    async fn page_with_retry(
-        &self,
-        level_id: &str,
-        cursor: Option<&serde_json::Value>,
-        attempts: &mut u32,
-    ) -> Result<bbs::ReplyListData, PluginFailure> {
-        let mut retries = 0;
-        loop {
-            *attempts += 1;
-            match self.bbs.page(level_id, cursor).await {
-                Ok(page) => return Ok(page),
-                Err(error) if retryable(&error) && retries < PAGE_RETRIES => {
-                    debug!(
-                        code = error.code(),
-                        attempt = *attempts,
-                        "翻页失败，退避后重试"
-                    );
-                    tokio::time::sleep(RETRY_BACKOFF * 3u32.pow(retries)).await;
-                    retries += 1;
-                }
-                Err(error) => return Err(error),
-            }
-        }
-    }
-
     /// 中途落盘：把已抓到的评论并进归档，并推进「最近一次采集时间」。
     ///
     /// **不动 `fetch_count`**：一次采集不管中途落盘几次，界面上都只算一次。
@@ -254,7 +228,7 @@ impl CommentCollector {
         let version = value
             .get("schema_version")
             .and_then(serde_json::Value::as_u64);
-        if !matches!(version, Some(1) | Some(2)) {
+        if !matches!(version, Some(1) | Some(2) | Some(3)) {
             warn!(level_id, ?version, "本地归档版本不匹配");
             return Err(PluginFailure::LocalData(
                 "本地归档版本不匹配，请重新采集".into(),
@@ -275,10 +249,11 @@ impl CommentCollector {
             archive.collection_state = CollectionState::Unknown;
             archive.collection_message.clear();
         }
+        archive.schema_version = ARCHIVE_VERSION;
         Ok(archive)
     }
 
-    /// 读取本地归档（不触发采集）；v1 归档在内存中迁移到 v2。
+    /// 读取本地归档（不触发采集）；v1/v2 归档在内存中迁移到 v3。
     pub fn archive(&self, level_id: &str) -> Result<Option<CommentArchive>, PluginFailure> {
         let path = self.archive_path(level_id)?;
         if !path.exists() {
@@ -458,15 +433,12 @@ impl CommentCollector {
         if let Some(dir) = path.parent() {
             fs::create_dir_all(dir).map_err(storage)?;
         }
-        let bytes = serde_json::to_vec(archive).map_err(storage)?;
         // 读取缓存由文件长度和修改时间识别；先失效，避免原子替换前后落在同一时间粒度时读到旧页。
         if let Ok(mut cache) = self.view_cache.lock() {
             *cache = None;
         }
         // 半途失败不破坏上一份归档：先写临时文件再原子替换。
-        let temp = path.with_extension("tmp");
-        fs::write(&temp, bytes).map_err(storage)?;
-        fs::rename(temp, path).map_err(storage)?;
+        monitor::atomic_json(&path, archive)?;
         if let Ok(mut cache) = self.view_cache.lock() {
             *cache = None;
         }
@@ -504,6 +476,7 @@ impl CommentCollector {
                     count: archive.comments.len() as u32,
                     collection_state: archive.collection_state,
                     needs_recollect: false,
+                    last_new_counts: archive.last_new_counts,
                 });
                 continue;
             }
@@ -516,6 +489,7 @@ impl CommentCollector {
                 count: 0,
                 collection_state: CollectionState::Unknown,
                 needs_recollect: true,
+                last_new_counts: None,
             });
         }
         out.sort_by_key(|item| std::cmp::Reverse(item.updated_at));
@@ -619,163 +593,29 @@ impl CommentCollector {
         Ok(true)
     }
 
-    /// 采集一次并并入本地归档，返回合并后的归档。
-    ///
-    /// 官方只给滚动窗口，所以这里不做"逐次快照"，而是把评论按 `reply_id` 并进已有归档：
-    /// 已经滑出窗口的评论仍留在本地，重复采集也不会产生副本。
-    ///
-    /// 每 [`CHECKPOINT_PAGES`] 页落一次盘，取消与失败时也会把已抓到的页并进去——
-    /// 官方接口抖一下不该毁掉几十页的成果。
-    #[instrument(
-        skip(self, query, progress),
-        fields(plugin = "comment_collector", level_id = %query.level_id)
-    )]
+    /// Foreground full comparison; background monitoring uses independent cancellation.
+    #[instrument(skip(self, query, progress), fields(plugin = "comment_collector", level_id = %query.level_id))]
     pub async fn collect<F: FnMut(CollectProgress) + Send>(
         &self,
         query: CommentQuery,
-        mut progress: F,
+        progress: F,
     ) -> Result<CommentArchive, PluginFailure> {
         let _guard = self
             .collecting
             .try_lock()
             .map_err(|_| PluginFailure::Busy)?;
-        if !valid_level_id(&query.level_id) {
-            return Err(PluginFailure::InvalidInput);
-        }
         self.cancel.store(false, Ordering::SeqCst);
-        let started_at = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(storage)?
-            .as_secs();
-        let mut archive = match self.archive(&query.level_id) {
-            Ok(Some(archive)) => archive,
-            Ok(None) | Err(PluginFailure::LocalData(_)) => {
-                let level = LevelInfo {
-                    level_id: query.level_id.clone(),
-                    ..LevelInfo::default()
-                };
-                CommentArchive::empty(level)
-            }
-            Err(error) => return Err(error),
-        };
-        // 一旦用户启动重新采集，就直接用新归档替换无法读取的旧文件；不创建备份。
-        // 先持久化进行中状态，连关卡信息请求失败时也不会留下过期的“已完成”标记。
-        self.checkpoint(&mut archive, Vec::new(), started_at, 0, "正在获取关卡信息")?;
-        let mut level = match self.bbs.level(&query.level_id).await {
-            Ok(level) => level,
-            Err(error) => {
-                self.checkpoint(
-                    &mut archive,
-                    Vec::new(),
-                    started_at,
-                    0,
-                    &format!("获取关卡信息失败：{error}；请重新采集"),
-                )?;
-                return Err(error);
-            }
-        };
-        if level.level_id.is_empty() {
-            level.level_id = query.level_id.clone();
-        }
-        archive.level = level.clone();
-        self.checkpoint(&mut archive, Vec::new(), started_at, 0, "本次采集尚未完成")?;
-        info!("开始采集评论");
-
-        let mut cursor: Option<serde_json::Value> = None;
-        let mut pages = 0u32;
-        let mut fetched = 0u32;
-        // 距上次落盘新抓到的评论；检查点与收尾都从这里取。
-        let mut pending = Vec::new();
-        loop {
-            if self.cancel.load(Ordering::SeqCst) {
-                self.checkpoint(
-                    &mut archive,
-                    std::mem::take(&mut pending),
-                    started_at,
-                    pages,
-                    "采集已取消，已抓取部分已保留",
-                )?;
-                info!("采集已取消");
-                return Err(cancelled());
-            }
-            let mut attempts = 0u32;
-            let page = match self
-                .page_with_retry(&query.level_id, cursor.as_ref(), &mut attempts)
-                .await
-            {
-                Ok(page) => page,
-                Err(error) => {
-                    self.checkpoint(
-                        &mut archive,
-                        std::mem::take(&mut pending),
-                        started_at,
-                        pages,
-                        &format!("采集失败：{error}；已抓取部分已保留"),
-                    )?;
-                    warn!(
-                        code = error.code(),
-                        page = pages,
-                        attempts,
-                        "翻页失败，采集中止"
-                    );
-                    return Err(error);
-                }
-            };
-            pages += 1;
-            let items = page.items();
-            fetched += items.len() as u32;
-            pending.extend(items);
-            progress(CollectProgress {
-                page: pages,
-                fetched,
-            });
-            debug!(page = pages, fetched, "抓取一页评论");
-            if !page.more() {
-                break;
-            }
-            if page.next().is_empty() {
-                self.checkpoint(
-                    &mut archive,
-                    std::mem::take(&mut pending),
-                    started_at,
-                    pages,
-                    "官方接口表示还有评论，但没有提供下一页游标；归档未完成",
-                )?;
-                return Err(PluginFailure::InvalidResponse);
-            }
-            if pages >= MAX_PAGES {
-                let message =
-                    format!("翻到 {MAX_PAGES} 页上限仍未结束，可能有遗漏；已抓取部分已保留");
-                self.checkpoint(
-                    &mut archive,
-                    std::mem::take(&mut pending),
-                    started_at,
-                    pages,
-                    &message,
-                )?;
-                warn!(pages, "翻到页数上限，归档未完成");
-                return Err(PluginFailure::Other(message));
-            }
-            cursor = page.cursor().cloned();
-            if pages.is_multiple_of(CHECKPOINT_PAGES) {
-                self.checkpoint(
-                    &mut archive,
-                    std::mem::take(&mut pending),
-                    started_at,
-                    pages,
-                    "本次采集尚未完成",
-                )
-                .map_err(|error| {
-                    warn!(reason = %error, "检查点落盘失败");
-                    error
-                })?;
-            }
-            tokio::time::sleep(PAGE_DELAY).await;
-        }
-        archive.merge(level, started_at, pages, pending);
-        self.save(&archive)?;
-        info!(pages, fetched, total = archive.comments.len(), "采集完成");
-        Ok(archive)
+        let options = self.monitor_config()?;
+        self.bbs
+            .set_request_interval(options.request_interval_ms as u64);
+        self.collect_mode(
+            &query.level_id,
+            CollectionMode::Full,
+            &options,
+            self.cancel.clone(),
+            progress,
+        )
+        .await
     }
 }
 

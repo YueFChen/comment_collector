@@ -42,12 +42,13 @@ import {
 } from './display'
 import { t } from './i18n'
 import { CollectProgressBar } from './progress'
+import { AddMonitorAction, type MonitorActionProps } from './add-monitor'
 import {
   type Filter,
   type Sort,
 } from './view'
 
-export interface ResultProps {
+export interface ResultProps extends MonitorActionProps {
   api: CommentsApi
   /** 要展示的关卡；来自路由参数。 */
   levelId: string
@@ -94,7 +95,7 @@ function collectionStatus(state: CollectionState, message: string): string {
  * 只读本地归档并做呈现：筛选、排序、分页都只影响视图，不触发采集。
  * 唯一的写入操作是「重新采集」，且结果同样落到归档。
  */
-export function CommentsResultPage({ api, levelId, onBack }: ResultProps) {
+export function CommentsResultPage({ api, levelId, onBack, ...monitorActions }: ResultProps) {
   const [archive, setArchive] = useState<ArchiveViewPage | null>(null)
   const [directory, setDirectory] = useState('')
   const [progress, setProgress] = useState<CollectProgress | null>(null)
@@ -372,9 +373,10 @@ export function CommentsResultPage({ api, levelId, onBack }: ResultProps) {
         <p className="cc-result-meta">
           {t('common.levelId')} {levelId}
           {overview
-            ? ` · ${t('result.updatedAt')} ${formatTime(overview.updated_at)} · ${t('result.fetchCount', { count: overview.fetch_count })}`
+            ? ` · ${t('result.updatedAt')} ${formatTime(overview.updated_at)}`
             : ''}
         </p>
+        {overview && <AddMonitorAction levelId={levelId} disabled={busy || loading} {...monitorActions} />}
         <button
           className={isFavorite ? 'cc-ghost cc-favorite cc-favorite--active' : 'cc-ghost cc-favorite'}
           disabled={favoriteBusy || loading || (!isFavorite && !overview)}
@@ -404,12 +406,12 @@ export function CommentsResultPage({ api, levelId, onBack }: ResultProps) {
           <span>{t('result.exported', { path: exportedPath })}</span>
         </div>
       )}
-      {overview && (
+      {overview && !busy && overview.collection_state !== 'complete' && (
         <div
-          className={!busy && overview.collection_state === 'complete' ? 'cc-notice' : 'cc-warning'}
+          className="cc-warning"
           role="status"
         >
-          <span>{busy ? t('result.collectionInProgress') : collectionStatus(overview.collection_state, overview.collection_message)}</span>
+          <span>{collectionStatus(overview.collection_state, overview.collection_message)}</span>
         </div>
       )}
       {busy && <CollectProgressBar progress={progress} onCancel={stop} />}
@@ -558,10 +560,10 @@ export function CommentsResultPage({ api, levelId, onBack }: ResultProps) {
                   })}
             </span>
             {directory && (
-              <button className="cc-dir" title={t('result.openDir')} onClick={() => void reveal()}>
+              <button className="cc-dir" title={directory} onClick={() => void reveal()}>
                 <FolderOpen aria-hidden />
                 <span className="cc-dir-text">
-                  {t('result.exportDir')}<code>{directory}</code>
+                  {t('result.openDir')}
                 </span>
               </button>
             )}
@@ -620,44 +622,44 @@ export function CommentsResultPage({ api, levelId, onBack }: ResultProps) {
                 })}
               </section>
 
-              {pageCount > 1 && (
-                <nav className="cc-pagination" aria-label={t('result.pageSizeLabel')}>
-                  <label>
-                    <select
-                      aria-label={t('result.pageSizeLabel')}
-                      value={pageSize}
-                      onChange={(event) => changePageSize(Number(event.target.value))}
-                    >
-                      {PAGE_SIZES.map((size) => (
-                        <option key={size} value={size}>
-                          {size} {t('result.pageSize')}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <div className="cc-pager">
-                    <button
-                      aria-label={t('result.prevPage')}
-                      disabled={safePage <= 1}
-                      onClick={() => setPage(safePage - 1)}
-                    >
-                      <ChevronLeft aria-hidden />
-                    </button>
-                    <span>{t('result.pageOf', { page: safePage, pages: pageCount })}</span>
-                    <button
-                      aria-label={t('result.nextPage')}
-                      disabled={safePage >= pageCount}
-                      onClick={() => setPage(safePage + 1)}
-                    >
-                      <ChevronRight aria-hidden />
-                    </button>
-                  </div>
-                </nav>
-              )}
-            </>
-          )}
-        </>
-      )}
+                {pageCount > 1 && (
+                  <nav className="cc-pagination" aria-label={t('result.pageSizeLabel')}>
+                    <label>
+                      <select
+                        aria-label={t('result.pageSizeLabel')}
+                        value={pageSize}
+                        onChange={(event) => changePageSize(Number(event.target.value))}
+                      >
+                        {PAGE_SIZES.map((size) => (
+                          <option key={size} value={size}>
+                            {size} {t('result.pageSize')}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <div className="cc-pager">
+                      <button
+                        aria-label={t('result.prevPage')}
+                        disabled={safePage <= 1}
+                        onClick={() => setPage(safePage - 1)}
+                      >
+                        <ChevronLeft aria-hidden />
+                      </button>
+                      <span>{t('result.pageOf', { page: safePage, pages: pageCount })}</span>
+                      <button
+                        aria-label={t('result.nextPage')}
+                        disabled={safePage >= pageCount}
+                        onClick={() => setPage(safePage + 1)}
+                      >
+                        <ChevronRight aria-hidden />
+                      </button>
+                    </div>
+                  </nav>
+                )}
+              </>
+            )}
+          </>
+        )}
     </section>
   )
 }

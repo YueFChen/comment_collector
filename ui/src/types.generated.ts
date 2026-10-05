@@ -1,4 +1,16 @@
 // Generated from Rust by examples/generate_bindings.rs. Do not edit.
+export type CollectionMode = "full" | "incremental";
+export type MonitorConfig = { enabled: boolean, level_ids: Array<string>, incremental_interval_secs: number, full_interval_secs: number, max_parallel: number, request_interval_ms: number, overlap_pages: number, incremental_max_pages: number, };
+export type MonitorLevelStatus = { level_id: string, running: boolean, last_attempt_at: number, last_success_at: number, last_full_success_at: number, consecutive_failures: number, last_error: string, last_mode: CollectionMode | null,
+/**
+ * A paused full traversal must finish before returning to incremental scans.
+ */
+needs_full_recovery: boolean,
+/**
+ * Computed from the current schedule; null while paused or running.
+ */
+next_collect_at: number | null, };
+export type MonitorStatus = { config: MonitorConfig, levels: Array<MonitorLevelStatus>, };
 export type CommentQuery = {
 /**
  * 关卡 id（官方为纯数字）。
@@ -57,6 +69,7 @@ parent_id: string,
  * 实测样本中全部是对主评论的直接回复，故恒为空。
  */
 reply_to: string, };
+export type NewCommentCounts = { recommended: number, not_recommended: number, };
 export type CommentArchive = { schema_version: number, level: LevelInfo,
 /**
  * 最近一次采集时间（Unix 秒）。
@@ -79,6 +92,10 @@ collection_state: CollectionState,
  */
 collection_message: string,
 /**
+ * 旧归档无最近新增统计，读取时不从历史数据推算。
+ */
+last_new_counts: NewCommentCounts | null,
+/**
  * 主评论与楼中楼按采集顺序展开存放。
  */
 comments: Array<CommentItem>, };
@@ -99,7 +116,7 @@ count: number, collection_state: CollectionState,
 /**
  * 文件存在但不能作为归档读取，需要重新采集。
  */
-needs_recollect: boolean, };
+needs_recollect: boolean, last_new_counts: NewCommentCounts | null, };
 export type FavoriteLevel = { level_id: string, level_name: string, cover_url: string,
 /**
  * 加入本地收藏的时间（Unix 秒）。

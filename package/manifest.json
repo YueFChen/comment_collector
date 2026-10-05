@@ -2,8 +2,8 @@
   "manifestVersion": 2,
   "id": "comment_collector",
   "name": "奇域评论采集器",
-  "version": "0.1.1",
-  "description": "无需登录，采集奇域关卡公开评论，并管理本地归档与收藏。",
+  "version": "0.1.2",
+  "description": "无需登录，采集奇域关卡公开评论，支持定时监测和本地导出。",
   "icon": "message-circle",
   "hostCompatibility": {
     "minCoreVersion": "0.1.8",

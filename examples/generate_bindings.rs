@@ -8,9 +8,14 @@ fn main() {
     let mut out = String::from(HEADER);
     macro_rules! emit { ($($t:ty),*) => { $(out.push_str("export ");out.push_str(&<$t>::decl(&cfg));out.push('\n');)* }; }
     emit!(
+        CollectionMode,
+        MonitorConfig,
+        MonitorLevelStatus,
+        MonitorStatus,
         CommentQuery,
         LevelInfo,
         CommentItem,
+        NewCommentCounts,
         CommentArchive,
         CollectionState,
         ArchiveSummary,

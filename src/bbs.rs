@@ -4,7 +4,13 @@
 //! 官方改字段时只需改这一层，本地归档与前端绑定不受影响。
 //! 接口全程匿名，不需要账号凭据。
 
-use std::sync::Arc;
+use std::sync::{
+    Arc,
+    atomic::{AtomicBool, AtomicU64, Ordering},
+};
+use std::time::Duration;
+use tokio::sync::Mutex;
+use tokio::time::Instant;
 
 use async_trait::async_trait;
 use serde::{Deserialize, Deserializer};
@@ -22,8 +28,23 @@ const REGION: &str = "cn_gf01";
 /// 20 是官方**硬上限**，不是我们的选择：实测 `size` 给 5 / 10 会被尊重，给 50 / 100 也只回 20。
 /// 所以调大没有收益，提速只能靠压缩 `lib.rs` 里的翻页间隔。
 const PAGE_SIZE: u32 = 20;
-/// 排序方式**必须用热度**：实测按楼层降序只返回部分评论（243 条里少 35 条）。
-const SORT_TYPE: &str = "SORT_TYPE_HOT";
+/// Full scans keep the historically verified hot order; incremental scans use
+/// descending floors. See docs/API-RESEARCH.md for source and coverage limits.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum ReplySort {
+    Hot,
+    FloorDesc,
+    FloorAsc,
+}
+impl ReplySort {
+    fn wire(self) -> &'static str {
+        match self {
+            Self::Hot => "SORT_TYPE_HOT",
+            Self::FloorDesc => "SORT_TYPE_FLOOR_DESC",
+            Self::FloorAsc => "SORT_TYPE_FLOOR_ASC",
+        }
+    }
+}
 /// 单次采集的页数上限，防止官方 `has_more` 异常时无限翻页。
 pub(crate) const MAX_PAGES: u32 = 500;
 
@@ -176,8 +197,9 @@ impl From<LevelWire> for LevelInfo {
 
 #[derive(Deserialize)]
 pub(crate) struct ReplyListData {
-    #[serde(default)]
     reply_list: Vec<ReplyWire>,
+    #[serde(default)]
+    total: Option<Scalar>,
     /// 官方游标：结构不透明，按原样带回下一次请求。
     #[serde(default)]
     cursor: Option<Value>,
@@ -191,6 +213,28 @@ impl ReplyListData {
             expand(&mut out, reply, "", false);
         }
         out
+    }
+
+    pub(crate) fn items_as_sub(&self, parent_id: &str) -> Vec<CommentItem> {
+        let mut out = Vec::new();
+        for reply in &self.reply_list {
+            expand(&mut out, reply, parent_id, true);
+        }
+        out
+    }
+
+    pub(crate) fn validate(&self) -> Result<(), PluginFailure> {
+        let flag = self.cursor.as_ref().and_then(|c| c.get("has_more"));
+        let valid_flag = matches!(flag, Some(Value::Bool(_)))
+            || matches!(flag, Some(Value::String(s)) if ["true", "false", "0", "1"].contains(&s.as_str()))
+            || matches!(flag, Some(Value::Number(n)) if n.as_u64().is_some_and(|n| n <= 1));
+        fn valid_reply(reply: &ReplyWire) -> bool {
+            !reply.reply_id.text().is_empty() && reply.sub_replies.iter().all(valid_reply)
+        }
+        if !valid_flag || !self.reply_list.iter().all(valid_reply) {
+            return Err(PluginFailure::InvalidResponse);
+        }
+        Ok(())
     }
 
     /// 是否还有下一页，以及下一页游标里的 `next`。
@@ -329,17 +373,56 @@ pub trait PublicHttpClient: Send + Sync {
 
 pub struct Bbs {
     net: Arc<dyn PublicHttpClient>,
+    // Shared by every level, metadata request and retry, not a per-worker sleep.
+    next_request: Mutex<Instant>,
+    request_interval_ms: AtomicU64,
 }
 
 impl Bbs {
     pub fn new(net: Arc<dyn PublicHttpClient>) -> Self {
-        Self { net }
+        Self {
+            net,
+            next_request: Mutex::new(Instant::now()),
+            request_interval_ms: AtomicU64::new(500),
+        }
+    }
+
+    pub(crate) fn set_request_interval(&self, millis: u64) {
+        self.request_interval_ms
+            .store(millis.clamp(250, 60_000), Ordering::Relaxed);
+    }
+
+    async fn throttle(&self, cancel: &AtomicBool) -> Result<(), PluginFailure> {
+        let mut next = self.next_request.lock().await;
+        loop {
+            if cancel.load(Ordering::SeqCst) {
+                return Err(crate::cancelled());
+            }
+            let now = Instant::now();
+            if now >= *next {
+                break;
+            }
+            tokio::time::sleep_until((*next).min(now + Duration::from_millis(100))).await;
+        }
+        *next = Instant::now()
+            + Duration::from_millis(self.request_interval_ms.load(Ordering::Relaxed));
+        Ok(())
+    }
+
+    pub(crate) async fn cooldown(&self, duration: Duration) {
+        let mut next = self.next_request.lock().await;
+        *next = (*next).max(Instant::now() + duration);
     }
 
     /// 关卡详情。
-    pub(crate) async fn level(&self, level_id: &str) -> Result<LevelInfo, PluginFailure> {
+    pub(crate) async fn level(
+        &self,
+        level_id: &str,
+        cancel: &AtomicBool,
+    ) -> Result<LevelInfo, PluginFailure> {
         let url =
             format!("{BASE}/level/detail?level_id={level_id}&uid=&region={REGION}&lang=zh-cn");
+        self.throttle(cancel).await?;
         let bytes = self.net.get_bytes(&url, &headers(), &[]).await?;
         let value: Value =
             serde_json::from_slice(&bytes).map_err(|_| PluginFailure::InvalidResponse)?;
@@ -352,23 +435,95 @@ impl Bbs {
         &self,
         level_id: &str,
         cursor: Option<&Value>,
+        sort: ReplySort,
+        cancel: &AtomicBool,
     ) -> Result<ReplyListData, PluginFailure> {
-        let url = format!("{BASE}/reply/list?lang=zh-cn");
-        let cursor = cursor
-            .cloned()
-            .unwrap_or_else(|| json!({ "next": "", "size": PAGE_SIZE, "sort_type": SORT_TYPE }));
-        let body = json!({
+        self.request_page(level_id, cursor, sort, None, cancel)
+            .await
+    }
+
+    pub(crate) async fn sub_page(
+        &self,
+        level_id: &str,
+        parent_id: &str,
+        cursor: Option<&Value>,
+        cancel: &AtomicBool,
+    ) -> Result<ReplyListData, PluginFailure> {
+        self.request_page(
+            level_id,
+            cursor,
+            ReplySort::FloorAsc,
+            Some(parent_id),
+            cancel,
+        )
+        .await
+    }
+
+    async fn request_page(
+        &self,
+        level_id: &str,
+        cursor: Option<&Value>,
+        sort: ReplySort,
+        parent_id: Option<&str>,
+        cancel: &AtomicBool,
+    ) -> Result<ReplyListData, PluginFailure> {
+        let path = if parent_id.is_some() {
+            "level/reply/sub_replies"
+        } else {
+            "reply/list"
+        };
+        let url = format!("{BASE}/{path}?lang=zh-cn");
+        let first_page = cursor.is_none();
+        let mut cursor = cursor.cloned().unwrap_or_else(|| json!({ "next": "" }));
+        let object = cursor
+            .as_object_mut()
+            .ok_or(PluginFailure::InvalidResponse)?;
+        // Preserve opaque server fields, while retaining size and order omitted by responses.
+        object.insert("size".into(), json!(PAGE_SIZE));
+        object.insert("sort_type".into(), json!(sort.wire()));
+        let mut body = json!({
             "uid": "",
             "region": REGION,
             "level_id": level_id,
             "cursor": cursor,
         });
+        if let Some(parent_id) = parent_id {
+            body["parent_reply_id"] = json!(parent_id);
+        }
+        self.throttle(cancel).await?;
         let bytes = self
             .net
             .post_json(&url, &headers(), &body.to_string())
             .await?;
         let value: Value =
             serde_json::from_slice(&bytes).map_err(|_| PluginFailure::InvalidResponse)?;
-        decode(value)
+        let page: ReplyListData = decode(value)?;
+        // Observed on 75942301324: a HOT request returns all six main replies,
+        // but its terminal cursor reports FLOOR_DESC. No cursor is replayed when
+        // this first page already covers the declared total. Keep every other
+        // sort change invalid, especially on continuations and child threads.
+        let complete_main_fallback = first_page
+            && parent_id.is_none()
+            && sort == ReplySort::Hot
+            && !page.more()
+            && page
+                .cursor()
+                .and_then(|c| c.get("sort_type"))
+                .and_then(Value::as_str)
+                == Some(ReplySort::FloorDesc.wire())
+            && page
+                .total
+                .as_ref()
+                .and_then(|n| n.text().parse::<usize>().ok())
+                == Some(page.reply_list.len());
+        if page
+            .cursor()
+            .and_then(|c| c.get("sort_type"))
+            .is_some_and(|s| s.as_str() != Some(sort.wire()))
+            && !complete_main_fallback
+        {
+            return Err(PluginFailure::InvalidResponse);
+        }
+        Ok(page)
     }
 }

@@ -1,6 +1,6 @@
 {
   "name": "@wonderland/comment-collector-ui",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "private": true,
   "type": "module",
   "exports": {
@@ -9,7 +9,7 @@
   "scripts": {
     "build": "vite build",
     "typecheck": "tsc --noEmit && tsc -p tsconfig.test.json",
-    "test": "node --experimental-strip-types --test src/display.test.ts src/view.test.ts"
+    "test": "node --experimental-strip-types --test src/display.test.ts src/view.test.ts src/monitor-config.test.ts"
   },
   "dependencies": {
     "@wonderland/plugin-ui-sdk": "link:../../../packages/plugin-ui-sdk",

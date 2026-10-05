@@ -1,9 +1,10 @@
 import { createRoot } from 'react-dom/client'
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { createPluginHostClient } from '@wonderland/plugin-ui-sdk'
 
-import { CommentsEntryPage, CommentsResultPage } from './index'
+import { CommentsWorkspace } from './index'
 import type { CommentsApi } from './api'
+import type { MonitorConfig, MonitorStatus } from './monitor-types'
 import type {
   ArchiveSummary,
   ArchiveOverview,
@@ -24,6 +25,12 @@ const host = createPluginHostClient('comment_collector')
 let activeCollectId: string | null = null
 
 const api: CommentsApi = {
+  monitorConfig: () => host.call<MonitorConfig>('monitor_config'),
+  monitorAdd: (levelId) => host.call<MonitorConfig>('monitor_add', { level_id: levelId }),
+  monitorRemove: (levelId) => host.call<MonitorConfig>('monitor_remove', { level_id: levelId }),
+  monitorConfigure: (config) => host.call<MonitorConfig>('monitor_configure', { config }),
+  monitorStatus: () => host.call<MonitorStatus>('monitor_status'),
+  monitorRun: async (levelId, mode) => { await host.call('monitor_run', { level_id: levelId, mode }) },
   collect: async (query: CommentQuery, onProgress: (progress: CollectProgress) => void) => {
     await host.ready
     let requestId = ''
@@ -53,7 +60,6 @@ const api: CommentsApi = {
 }
 
 function App() {
-  const [levelId, setLevelId] = useState<string | null>(null)
   useEffect(() => {
     let disposed = false
     let stopTheme: () => void = () => {}
@@ -67,9 +73,7 @@ function App() {
     return () => { disposed = true; stopTheme(); stopLifecycle() }
   }, [])
 
-  return levelId === null
-    ? <CommentsEntryPage api={api} onOpen={setLevelId} />
-    : <CommentsResultPage api={api} levelId={levelId} onBack={() => setLevelId(null)} />
+  return <CommentsWorkspace api={api} />
 }
 
 createRoot(document.getElementById('root')!).render(<App />)

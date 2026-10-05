@@ -1,0 +1,34 @@
+{
+  "level_id": "75942301324",
+  "checked_at_utc": "2026-10-05T06:37:59.477Z",
+  "probes": [
+    {
+      "endpoint": "https://bbs-api.miyoushe.com/community/ugc_community/web/api/reply/list?lang=zh-cn",
+      "request_sort": "SORT_TYPE_HOT",
+      "retcode": 0,
+      "total": 6,
+      "cursor": {
+        "next": "2",
+        "has_more": false,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 6
+    },
+    {
+      "endpoint": "https://bbs-api.miyoushe.com/community/ugc_community/web/api/level/reply/sub_replies?lang=zh-cn",
+      "request_sort": "SORT_TYPE_FLOOR_ASC",
+      "retcode": 0,
+      "cursor": {
+        "next": "2",
+        "has_more": false,
+        "sort_type": "SORT_TYPE_FLOOR_ASC"
+      },
+      "row_count": 1
+    }
+  ],
+  "result": {
+    "collection_state": "complete",
+    "comment_count": 7,
+    "network_requests": 3
+  }
+}

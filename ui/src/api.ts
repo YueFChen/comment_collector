@@ -1,3 +1,4 @@
+import type { MonitorConfig, MonitorMode, MonitorStatus } from './monitor-types'
 import type {
   ArchiveSummary,
   ArchiveOverview,
@@ -12,6 +13,13 @@ import type {
 
 /** 插件前端与宿主之间的契约；实现由 shell 提供（见 apps/desktop）。 */
 export interface CommentsApi {
+  /** 可选能力：旧宿主不提供时隐藏监测入口。 */
+  monitorConfig?(): Promise<MonitorConfig>
+  monitorConfigure?(config: MonitorConfig): Promise<MonitorConfig>
+  monitorAdd?(levelId: string): Promise<MonitorConfig>
+  monitorRemove?(levelId: string): Promise<MonitorConfig>
+  monitorStatus?(): Promise<MonitorStatus>
+  monitorRun?(levelId: string, mode: MonitorMode): Promise<void>
   /** 采集并并入本地归档；每翻完一页回调一次进度。 */
   collect(query: CommentQuery, onProgress: (progress: CollectProgress) => void): Promise<ArchiveOverview>
   /** 请正在进行的采集停下；已抓到的页仍会留在归档里，只是不再继续翻。 */
