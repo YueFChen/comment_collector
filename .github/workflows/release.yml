@@ -22,6 +22,9 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Preserve repository line endings for generated binding checks
+        run: git config --global core.autocrlf false
+
       - name: Checkout the pinned Core SDK source
         shell: pwsh
         env:
