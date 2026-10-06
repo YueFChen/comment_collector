@@ -350,6 +350,11 @@ impl CommentCollector {
             std::fs::create_dir_all(frontier_path.parent().expect("frontier directory"))
                 .map_err(storage)?;
             crate::monitor::atomic_json(&frontier_path, &committed)?;
+            if mode == CollectionMode::Full {
+                // The level lock is still held: publish the successful baseline
+                // before another foreground/background scan can start.
+                self.record_full_success(level_id, started_at, &id)?;
+            }
         }
         result.map(|()| archive)
     }
@@ -360,7 +365,13 @@ fn advance_cursor(
     seen: &mut HashSet<String>,
 ) -> Result<(), PluginFailure> {
     // Cursor loops and absent continuation tokens must never produce "complete".
-    if page.next().is_empty() || !seen.insert(page.next().to_owned()) {
+    // HOT offsets and DESC floors are different cursor namespaces.
+    let key = serde_json::to_string(&(
+        page.cursor().and_then(|cursor| cursor.get("sort_type")),
+        page.next(),
+    ))
+    .map_err(|_| PluginFailure::InvalidResponse)?;
+    if page.next().is_empty() || !seen.insert(key) {
         return Err(PluginFailure::InvalidResponse);
     }
     *cursor = page.cursor().cloned();

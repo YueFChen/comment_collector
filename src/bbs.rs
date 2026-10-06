@@ -28,8 +28,8 @@ const REGION: &str = "cn_gf01";
 /// 20 是官方**硬上限**，不是我们的选择：实测 `size` 给 5 / 10 会被尊重，给 50 / 100 也只回 20。
 /// 所以调大没有收益，提速只能靠压缩 `lib.rs` 里的翻页间隔。
 const PAGE_SIZE: u32 = 20;
-/// Full scans keep the historically verified hot order; incremental scans use
-/// descending floors. See docs/API-RESEARCH.md for source and coverage limits.
+/// Full scans start with the original HOT query and follow server phases;
+/// incremental scans start with descending floors. See docs/API-RESEARCH.md.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum ReplySort {
     Hot,
@@ -198,8 +198,6 @@ impl From<LevelWire> for LevelInfo {
 #[derive(Deserialize)]
 pub(crate) struct ReplyListData {
     reply_list: Vec<ReplyWire>,
-    #[serde(default)]
-    total: Option<Scalar>,
     /// 官方游标：结构不透明，按原样带回下一次请求。
     #[serde(default)]
     cursor: Option<Value>,
@@ -473,14 +471,27 @@ impl Bbs {
             "reply/list"
         };
         let url = format!("{BASE}/{path}?lang=zh-cn");
-        let first_page = cursor.is_none();
         let mut cursor = cursor.cloned().unwrap_or_else(|| json!({ "next": "" }));
         let object = cursor
             .as_object_mut()
             .ok_or(PluginFailure::InvalidResponse)?;
         // Preserve opaque server fields, while retaining size and order omitted by responses.
         object.insert("size".into(), json!(PAGE_SIZE));
-        object.insert("sort_type".into(), json!(sort.wire()));
+        let request_sort = object
+            .entry("sort_type")
+            .or_insert_with(|| json!(sort.wire()))
+            .as_str()
+            .ok_or(PluginFailure::InvalidResponse)?
+            .to_owned();
+        // Full main scans start HOT and may enter the server's descending-floor
+        // phase. Incremental main scans and ASC child scans retain their order.
+        if request_sort != sort.wire()
+            && !(parent_id.is_none()
+                && sort == ReplySort::Hot
+                && request_sort == ReplySort::FloorDesc.wire())
+        {
+            return Err(PluginFailure::InvalidResponse);
+        }
         let mut body = json!({
             "uid": "",
             "region": REGION,
@@ -497,30 +508,25 @@ impl Bbs {
             .await?;
         let value: Value =
             serde_json::from_slice(&bytes).map_err(|_| PluginFailure::InvalidResponse)?;
-        let page: ReplyListData = decode(value)?;
-        // Observed on 75942301324: a HOT request returns all six main replies,
-        // but its terminal cursor reports FLOOR_DESC. No cursor is replayed when
-        // this first page already covers the declared total. Keep every other
-        // sort change invalid, especially on continuations and child threads.
-        let complete_main_fallback = first_page
-            && parent_id.is_none()
-            && sort == ReplySort::Hot
-            && !page.more()
-            && page
-                .cursor()
-                .and_then(|c| c.get("sort_type"))
-                .and_then(Value::as_str)
-                == Some(ReplySort::FloorDesc.wire())
-            && page
-                .total
-                .as_ref()
-                .and_then(|n| n.text().parse::<usize>().ok())
-                == Some(page.reply_list.len());
-        if page
-            .cursor()
-            .and_then(|c| c.get("sort_type"))
-            .is_some_and(|s| s.as_str() != Some(sort.wire()))
-            && !complete_main_fallback
+        let mut page: ReplyListData = decode(value)?;
+        let response_cursor = page
+            .cursor
+            .as_mut()
+            .and_then(Value::as_object_mut)
+            .ok_or(PluginFailure::InvalidResponse)?;
+        let response_sort = response_cursor
+            .entry("sort_type")
+            .or_insert_with(|| json!(request_sort))
+            .as_str()
+            .ok_or(PluginFailure::InvalidResponse)?;
+        // This is a normal main-list phase transition, not a malformed response.
+        // Replay its cursor as v0.1.1 and the official frontend do; never replace
+        // a floor cursor with HOT or allow the reverse/unknown transitions.
+        if response_sort != request_sort
+            && !(parent_id.is_none()
+                && sort == ReplySort::Hot
+                && request_sort == ReplySort::Hot.wire()
+                && response_sort == ReplySort::FloorDesc.wire())
         {
             return Err(PluginFailure::InvalidResponse);
         }

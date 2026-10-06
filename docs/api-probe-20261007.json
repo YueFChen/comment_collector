@@ -1,0 +1,1361 @@
+{
+  "level_id": "54260057081",
+  "checked_at_utc": "2026-10-06T18:12:20.840Z",
+  "probes": [
+    {
+      "endpoint": "/community/ugc_community/web/api/level/detail",
+      "retcode": 0
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "next": "",
+        "size": 20,
+        "sort_type": "SORT_TYPE_HOT"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "20",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_HOT"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/level/reply/sub_replies",
+      "request_cursor": {
+        "next": "",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_ASC"
+      },
+      "retcode": 0,
+      "response_cursor": {
+        "next": "2",
+        "has_more": false,
+        "sort_type": "SORT_TYPE_FLOOR_ASC"
+      },
+      "row_count": 1
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/level/reply/sub_replies",
+      "request_cursor": {
+        "next": "",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_ASC"
+      },
+      "retcode": 0,
+      "response_cursor": {
+        "next": "4",
+        "has_more": false,
+        "sort_type": "SORT_TYPE_FLOOR_ASC"
+      },
+      "row_count": 3
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/level/reply/sub_replies",
+      "request_cursor": {
+        "next": "",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_ASC"
+      },
+      "retcode": 0,
+      "response_cursor": {
+        "next": "4",
+        "has_more": false,
+        "sort_type": "SORT_TYPE_FLOOR_ASC"
+      },
+      "row_count": 3
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/level/reply/sub_replies",
+      "request_cursor": {
+        "next": "",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_ASC"
+      },
+      "retcode": 0,
+      "response_cursor": {
+        "next": "2",
+        "has_more": false,
+        "sort_type": "SORT_TYPE_FLOOR_ASC"
+      },
+      "row_count": 1
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/level/reply/sub_replies",
+      "request_cursor": {
+        "next": "",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_ASC"
+      },
+      "retcode": 0,
+      "response_cursor": {
+        "next": "2",
+        "has_more": false,
+        "sort_type": "SORT_TYPE_FLOOR_ASC"
+      },
+      "row_count": 1
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "20",
+        "size": 20,
+        "sort_type": "SORT_TYPE_HOT"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "40",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_HOT"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "40",
+        "size": 20,
+        "sort_type": "SORT_TYPE_HOT"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "60",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_HOT"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "60",
+        "size": 20,
+        "sort_type": "SORT_TYPE_HOT"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "80",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_HOT"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "80",
+        "size": 20,
+        "sort_type": "SORT_TYPE_HOT"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "100",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_HOT"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "100",
+        "size": 20,
+        "sort_type": "SORT_TYPE_HOT"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "1439",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/level/reply/sub_replies",
+      "request_cursor": {
+        "next": "",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_ASC"
+      },
+      "retcode": 0,
+      "response_cursor": {
+        "next": "3",
+        "has_more": false,
+        "sort_type": "SORT_TYPE_FLOOR_ASC"
+      },
+      "row_count": 2
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "1439",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "1417",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "1417",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "1396",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "1396",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "1374",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "1374",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "1353",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "1353",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "1332",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "1332",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "1310",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "1310",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "1290",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "1290",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "1269",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "1269",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "1248",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "1248",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "1228",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "1228",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "1205",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "1205",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "1184",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "1184",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "1163",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "1163",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "1142",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "1142",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "1122",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "1122",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "1097",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "1097",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "1077",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "1077",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "1057",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "1057",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "1035",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "1035",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "1013",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "1013",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "990",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "990",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "969",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/level/reply/sub_replies",
+      "request_cursor": {
+        "next": "",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_ASC"
+      },
+      "retcode": 0,
+      "response_cursor": {
+        "next": "2",
+        "has_more": false,
+        "sort_type": "SORT_TYPE_FLOOR_ASC"
+      },
+      "row_count": 1
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "969",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "948",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "948",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "926",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "926",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "905",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "905",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "885",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "885",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "864",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "864",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "843",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "843",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "823",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "823",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "803",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "803",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "780",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "780",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "760",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "760",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "740",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "740",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "718",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "718",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "697",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "697",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "674",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "674",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "654",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "654",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "632",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "632",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "612",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "612",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "592",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "592",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "572",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "572",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "549",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "549",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "527",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "527",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "506",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "506",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "485",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "485",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "464",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "464",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "444",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "444",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "421",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "421",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "399",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "399",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "379",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "379",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "357",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "357",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "334",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "334",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "313",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "313",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "291",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "291",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "271",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "271",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "246",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "246",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "225",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "225",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "204",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "204",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "182",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "182",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "162",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "162",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "139",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "139",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "112",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "112",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "88",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "88",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "65",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "65",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "39",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "39",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "6",
+        "has_more": true,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 20
+    },
+    {
+      "endpoint": "/community/ugc_community/web/api/reply/list",
+      "request_cursor": {
+        "has_more": true,
+        "next": "6",
+        "size": 20,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "retcode": 0,
+      "total": 1445,
+      "response_cursor": {
+        "next": "0",
+        "has_more": false,
+        "sort_type": "SORT_TYPE_FLOOR_DESC"
+      },
+      "row_count": 5
+    }
+  ],
+  "result": {
+    "collection_state": "complete",
+    "main_count": 1445,
+    "child_count": 12,
+    "network_requests": 81
+  }
+}

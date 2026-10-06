@@ -14,9 +14,21 @@ The source files were retrieved as static public files using HTTP, not by drivin
 
 ## Main replies
 
+### 2026-10-07 HOT-to-DESC pagination regression
+
+The reported level `54260057081` (风之剑) exposes a normal main-list phase transition. With size 20, the first five HOT pages return HOT offsets `20` through `100`. The sixth request, with HOT next `100`, returns 20 rows and a FLOOR_DESC cursor with `has_more: true`. The first investigation returned next `1438` and total `1444`; a later full validation saw a newly added main reply, so its floor cursor and total increased by one. These are live values, not constants to calculate or hard-code.
+
+The v0.1.2 backend incorrectly rejected this nonterminal transition. Even removing that check alone would still corrupt continuation requests because it forcibly replaced the response sort with HOT, treating a floor cursor as a HOT offset. v0.1.1 and the current official frontend both replay response `next` and `sort_type`.
+
+The fix restores that behavior for ordinary/full collection: start HOT, allow the main endpoint's one-way HOT-to-FLOOR_DESC transition, and preserve the returned cursor and sort for following requests. Retain configured size 20 and opaque fields. A missing response sort inherits the actual request sort, including after entering DESC. Cursor-loop detection compares sort and next together because HOT offsets and DESC floors occupy different namespaces. Unknown/reverse transitions, child sort changes, malformed continuation tokens, repeated pages and request limits remain failures that preserve partial data.
+
+Only incremental monitoring starts main-list requests directly with FLOOR_DESC. Dedicated child scans retain their independently verified FLOOR_ASC traversal; do not apply the main phase transition to child responses. Starting every full scan with DESC is unsafe: a separate size-20 probe of `75942301324` returned all 15 main replies through HOT but only 9 through direct DESC.
+
+Metadata-only complete-backend validation evidence is recorded in [api-probe-20261007.json](api-probe-20261007.json). No comment text, user information or account credentials are stored in that evidence.
+
 ### 2026-10-05 single-page HOT fallback
 
-The user-reported level `75942301324` returns six main replies (`total: 6`) to a HOT request. Its first response is terminal (`has_more: false`, `next: "2"`), but reports `SORT_TYPE_FLOOR_DESC`. The earlier strict sort check rejected this complete page. The packaged backend now accepts only this main-list first-and-terminal-page case when the returned row count equals the declared total. It does not replay the differently sorted cursor. Missing totals, count shortfalls, continuation pages, nonterminal sort changes and child-thread sort changes remain invalid. A live packaged-backend collection made three anonymous requests and saved six main replies plus one child as a complete archive. Metadata evidence is in [api-probe-20261005.json](api-probe-20261005.json); no comment text or user details are retained.
+At that time, the user-reported level `75942301324` returned six main replies (`total: 6`) to a HOT request. Its first response was terminal (`has_more: false`, `next: "2"`), but reported `SORT_TYPE_FLOOR_DESC`. v0.1.2 accepted only this main-list first-and-terminal-page case when the returned row count equalled the declared total. That narrow exception was insufficient for the normal multipage transition discovered on October 7 above. The October 5 packaged-backend collection made three anonymous requests and saved six main replies plus one child as a complete archive. Metadata evidence is in [api-probe-20261005.json](api-probe-20261005.json); no comment text or user details are retained.
 
 `POST https://bbs-api.miyoushe.com/community/ugc_community/web/api/reply/list?lang=zh-cn`
 
@@ -40,7 +52,7 @@ Successful envelope: `retcode: 0`, `message: "OK"`. Data keys observed: `can_rep
 - Guessed aliases `SORT_TYPE_TIME` and `SORT_TYPE_NEW` each returned HTTP 200 with application retcode `-502` and a generic retry-later message. They are **not verified usable**, and must not be used as if they were supported newest sorts. The generic error does not document the server's complete enum vocabulary.
 - The current official main UI bundle only uses HOT; its child UI uses FLOOR_DESC. No distinct timestamp-sort option was found in those query implementations.
 
-Responses omit `cursor.size`. The official client reconstructs each request cursor from response `next`, response `sort_type`, and its configured size 15. Preserve configured size explicitly. Do not combine a cursor from one sort with another sort. Do not interpret a floor ID as a global comment count or a child floor as the parent's floor.
+Responses omit `cursor.size`. The official client reconstructs each request cursor from response `next`, response `sort_type`, and its configured size 15. Preserve configured size explicitly. Follow the main-list HOT-to-DESC response transition; do not overwrite its sort or combine a cursor from one sort with another sort. Do not interpret a floor ID as a global comment count or a child floor as the parent's floor.
 
 Both tested main sorts reported `total: 1454` while the greatest main floor was 1458. Counts and floor numbers are therefore not interchangeable. Deleted, hidden, moderated, or otherwise excluded records can leave holes; their specific causes were not established here.
 
@@ -96,12 +108,12 @@ Starting a new child traversal with `SORT_TYPE_FLOOR_ASC`, empty next, and size 
 
 All three response cursors retained FLOOR_ASC. There were exactly 41 distinct reply IDs, matching the parent’s reported count; no deeper nested children were returned. ASC therefore provides a verified complete traversal for this sampled thread and is the recommended starting sort for full child scans. This is one thread’s observed behavior, not a guarantee that all other threads have no moderation gaps, count lag, or malformed cursors. Continue to enforce incomplete-scan safeguards and compare observed child coverage with the parent’s count.
 
-The plugin can use HOT for full main reconciliation, FLOOR_DESC for recent main polling, and FLOOR_ASC for dedicated child pagination. Main and child completeness should be tracked separately.
+The plugin starts HOT and follows server phases for full main reconciliation, starts FLOOR_DESC for recent main polling, and uses FLOOR_ASC for dedicated child pagination. Main and child completeness should be tracked separately.
 
 ## Monitoring safety
 
 - Deduplicate by `reply_id`; use content/field hashes for change detection, and retain parent relationships explicitly.
-- Detect repeated cursors, repeated pages, unexpected sort changes, invalid envelopes, page limits, rate limits, and interrupted traversals. These are incomplete scans, never evidence of removal.
+- Detect repeated cursors within the same sort phase, repeated pages, unexpected sort changes (excluding the main HOT-to-DESC phase transition), invalid envelopes, page limits, rate limits, and interrupted traversals. These are incomplete scans, never evidence of removal.
 - Keep missing/unavailable observations separate from definitive deletion claims. The endpoint does not reveal why an old reply is absent.
 - A live paginated API is not a transactional snapshot. HOT ranks, new replies, moderation, and response previews can change during a scan. Consider repeated complete coverage before reporting persistent absence.
 - Returned `created_at` establishes creation time, not edit time. No edit timestamp or guaranteed change feed was verified.

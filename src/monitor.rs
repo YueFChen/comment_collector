@@ -104,6 +104,8 @@ pub(crate) struct MonitorRuntime {
     pub statuses: HashMap<String, MonitorLevelStatus>,
     pub active: HashMap<String, Arc<AtomicBool>>,
     pub requested: HashMap<String, CollectionMode>,
+    // Distinguish full completions even when they occur in the same second.
+    pub completed_full_runs: HashMap<String, String>,
 }
 
 pub(crate) fn now() -> u64 {
@@ -240,6 +242,39 @@ impl CommentCollector {
         let statuses: Vec<_> = monitor.statuses.values().collect();
         atomic_json(&self.root.join("monitor-state.json"), &statuses)
     }
+    /// Every successful full scan supplies a baseline, including foreground
+    /// collection before a level has been added to monitoring.
+    pub(crate) fn record_full_success(
+        &self,
+        level_id: &str,
+        started_at: u64,
+        run_id: &str,
+    ) -> Result<(), PluginFailure> {
+        let mut monitor = self.monitor.lock().map_err(storage)?;
+        self.initialize_monitor(&mut monitor)?;
+        let previous = monitor.statuses.get(level_id).cloned();
+        let status = monitor.statuses.entry(level_id.into()).or_default();
+        status.level_id = level_id.into();
+        status.last_attempt_at = started_at;
+        status.last_success_at = now();
+        status.last_full_success_at = status.last_success_at;
+        status.last_mode = Some(CollectionMode::Full);
+        status.needs_full_recovery = false;
+        status.consecutive_failures = 0;
+        status.last_error.clear();
+        if let Err(error) = self.save_monitor_state(&monitor) {
+            if let Some(previous) = previous {
+                monitor.statuses.insert(level_id.into(), previous);
+            } else {
+                monitor.statuses.remove(level_id);
+            }
+            return Err(error);
+        }
+        monitor
+            .completed_full_runs
+            .insert(level_id.into(), run_id.into());
+        Ok(())
+    }
     pub fn monitor_status(&self) -> Result<MonitorStatus, PluginFailure> {
         let config = self.monitor_config()?;
         let mut monitor = self.monitor.lock().map_err(storage)?;
@@ -355,6 +390,7 @@ impl CommentCollector {
                 })
                 .clone();
             let explicitly_requested = monitor.requested.contains_key(&id);
+            let previous_full_run = monitor.completed_full_runs.get(&id).cloned();
             let Some(mode) = monitor
                 .requested
                 .remove(&id)
@@ -397,9 +433,22 @@ impl CommentCollector {
                 });
                 if let Ok(mut monitor) = collector.monitor.lock() {
                     monitor.active.remove(&id);
+                    let newer_full_success =
+                        monitor.completed_full_runs.get(&id) != previous_full_run.as_ref();
                     let status = monitor.statuses.get_mut(&id).expect("admitted status");
                     status.running = false;
                     match result {
+                        // A foreground full scan can finish after this worker was
+                        // admitted or returned Busy. Never overwrite its baseline
+                        // with an older admission snapshot or failure.
+                        Err(error) if newer_full_success => {
+                            if matches!(error, PluginFailure::Busy)
+                                && explicitly_requested
+                                && !cancel_token.load(Ordering::SeqCst)
+                            {
+                                monitor.requested.insert(id.clone(), mode);
+                            }
+                        }
                         Err(PluginFailure::Busy) => {
                             *status = previous_status;
                             // Foreground contention is not a network failure. Retain an
@@ -446,7 +495,7 @@ pub(crate) fn due_mode(
     if status.running {
         return None;
     }
-    if status.last_attempt_at > 0 && now < next_attempt_at(config, status) {
+    if now < next_attempt_at(config, status) {
         return None;
     }
     if status.needs_full_recovery
@@ -472,5 +521,17 @@ fn next_attempt_at(config: &MonitorConfig, status: &MonitorLevelStatus) -> u64 {
     } else {
         config.incremental_interval_secs as u64
     };
-    status.last_attempt_at.saturating_add(wait)
+    let incremental_due = status.last_attempt_at.saturating_add(wait);
+    if status.consecutive_failures > 0
+        || status.needs_full_recovery
+        || status.last_full_success_at == 0
+    {
+        // Recovery retains the existing retry interval and failure cooldown.
+        incremental_due
+    } else {
+        let full_due = status
+            .last_full_success_at
+            .saturating_add(config.full_interval_secs as u64);
+        incremental_due.min(full_due)
+    }
 }

@@ -1,6 +1,6 @@
 # Core 0.1.8 兼容说明
 
-本插件版本为 **0.1.2**，最低 Core 为 **0.1.8**。构建前运行 `node scripts/check-core-compatibility.mjs`；构建脚本会自动检查此条件。旧 Core 0.1.7 不识别本次 manifest 扩展，不能安装本次新包。
+本插件版本为 **0.1.3**，最低 Core 为 **0.1.8**。构建前运行 `node scripts/check-core-compatibility.mjs`；构建脚本会自动检查此条件。旧 Core 0.1.7 不识别本次 manifest 扩展，不能安装本次新包。
 
 远程访问：**已声明**。
 

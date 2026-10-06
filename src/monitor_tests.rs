@@ -643,6 +643,153 @@ fn scheduler_prioritizes_full_scan_and_respects_failure_cooldown() {
 }
 
 #[test]
+fn full_deadline_is_independent_of_recent_incremental_attempts() {
+    let config = MonitorConfig {
+        incremental_interval_secs: 1800,
+        full_interval_secs: 86_400,
+        ..Default::default()
+    };
+    let full_success = 100_000;
+    let deadline = full_success + config.full_interval_secs as u64;
+    let mut status = MonitorLevelStatus {
+        last_full_success_at: full_success,
+        last_attempt_at: deadline - 60,
+        ..Default::default()
+    };
+    assert_eq!(due_mode(&config, &status, deadline - 1), None);
+    assert_eq!(
+        due_mode(&config, &status, deadline),
+        Some(CollectionMode::Full)
+    );
+    assert_eq!(
+        due_mode(&config, &status, deadline + 1),
+        Some(CollectionMode::Full)
+    );
+    status.running = true;
+    assert_eq!(due_mode(&config, &status, deadline), None);
+    status.running = false;
+    status.consecutive_failures = 1;
+    assert_eq!(due_mode(&config, &status, deadline), None);
+    let retry_at = status.last_attempt_at + 3600;
+    assert_eq!(
+        due_mode(&config, &status, retry_at),
+        Some(CollectionMode::Full)
+    );
+}
+
+#[tokio::test]
+async fn foreground_full_baseline_is_reused_after_adding_monitor_and_restart() {
+    let http = MockHttp::with_pages([last(vec![item("baseline", 1)])]);
+    let (collector, _root) = setup(http.clone());
+    let started = monitor::now();
+    collector
+        .collect(
+            CommentQuery {
+                level_id: LEVEL.into(),
+            },
+            |_| {},
+        )
+        .await
+        .unwrap();
+    collector.add_monitor(LEVEL).unwrap();
+    let status = collector.monitor_status().unwrap().levels.remove(0);
+    assert!(status.last_full_success_at >= started);
+    assert_eq!(status.last_mode, Some(CollectionMode::Full));
+    assert_eq!(status.consecutive_failures, 0);
+    assert!(!status.needs_full_recovery);
+    assert_eq!(due_mode(&options(), &status, monitor::now()), None);
+    assert_eq!(
+        status.next_collect_at,
+        Some(status.last_attempt_at + options().incremental_interval_secs as u64)
+    );
+
+    let restarted = CommentCollector::new(collector.root.clone(), http.clone()).unwrap();
+    let restored = restarted.monitor_status().unwrap().levels.remove(0);
+    assert_eq!(restored.last_full_success_at, status.last_full_success_at);
+    assert_eq!(due_mode(&options(), &restored, monitor::now()), None);
+    restarted
+        .request_monitor_run(LEVEL, CollectionMode::Incremental)
+        .unwrap();
+    assert_eq!(
+        restarted.monitor.lock().unwrap().requested.get(LEVEL),
+        Some(&CollectionMode::Incremental)
+    );
+    assert_eq!(
+        http.requests().len(),
+        1,
+        "adding or restarting does not repeat full collection"
+    );
+    http.assert_drained();
+}
+
+#[tokio::test]
+async fn foreground_failed_scan_does_not_publish_a_full_baseline() {
+    let http = MockHttp::with_pages([page(vec![], json!({"has_more": true, "next": "bad"}))]);
+    let (collector, _root) = setup(http.clone());
+    assert!(
+        collector
+            .collect(
+                CommentQuery {
+                    level_id: LEVEL.into()
+                },
+                |_| {}
+            )
+            .await
+            .is_err()
+    );
+    collector.add_monitor(LEVEL).unwrap();
+    let status = collector.monitor_status().unwrap().levels.remove(0);
+    assert_eq!(status.last_full_success_at, 0);
+    assert_eq!(
+        due_mode(&options(), &status, monitor::now()),
+        Some(CollectionMode::Full)
+    );
+    http.assert_drained();
+}
+
+#[tokio::test]
+async fn foreground_full_clears_previous_monitor_failure_and_recovery_state() {
+    let http = MockHttp::with_pages([last(vec![item("recovered", 1)])]);
+    let (collector, _root) = setup(http.clone());
+    collector.add_monitor(LEVEL).unwrap();
+    collector.monitor_status().unwrap();
+    collector.monitor.lock().unwrap().statuses.insert(
+        LEVEL.into(),
+        MonitorLevelStatus {
+            level_id: LEVEL.into(),
+            last_attempt_at: 1,
+            last_full_success_at: 1,
+            needs_full_recovery: true,
+            consecutive_failures: 3,
+            last_error: "old failure".into(),
+            ..Default::default()
+        },
+    );
+    collector
+        .collect(
+            CommentQuery {
+                level_id: LEVEL.into(),
+            },
+            |_| {},
+        )
+        .await
+        .unwrap();
+    let status = collector.monitor_status().unwrap().levels.remove(0);
+    assert_eq!(status.consecutive_failures, 0);
+    assert!(!status.needs_full_recovery);
+    assert!(status.last_error.is_empty());
+    assert_eq!(due_mode(&options(), &status, monitor::now()), None);
+    collector
+        .request_monitor_run(LEVEL, CollectionMode::Incremental)
+        .unwrap();
+    assert_eq!(
+        collector.monitor.lock().unwrap().requested.get(LEVEL),
+        Some(&CollectionMode::Incremental)
+    );
+    http.assert_drained();
+}
+
+#[test]
 fn restart_clears_running_flag_preserves_state_and_manual_requests_are_scoped() {
     let (collector, _root) = setup(MockHttp::with_pages([]));
     let mut config = options();
@@ -981,51 +1128,95 @@ async fn complete_single_main_page_accepts_verified_hot_to_floor_desc_fallback()
 }
 
 #[tokio::test]
-async fn main_sort_fallback_requires_a_complete_first_page_with_matching_total() {
-    for (has_more, total, continuation) in [(true, 1, false), (false, 2, false), (false, 1, true)] {
-        let mut response = page(
-            vec![item("reply", 2)],
-            json!({"has_more": has_more, "next": "B", "sort_type": "SORT_TYPE_FLOOR_DESC"}),
-        );
-        response["data"]["total"] = json!(total);
-        let pages = if continuation {
-            vec![more(vec![item("first", 1)], "A"), response]
-        } else {
-            vec![response]
-        };
+async fn full_scan_replays_hot_to_floor_desc_cursor_and_keeps_desc_when_omitted() {
+    for first_page_transition in [false, true] {
+        let mut pages = Vec::new();
+        if !first_page_transition {
+            pages.push(page(
+                vec![item("hot", 1)],
+                json!({"has_more": true, "next": "20", "sort_type": "SORT_TYPE_HOT"}),
+            ));
+        }
+        // The same token can occur in the HOT-offset and DESC-floor namespaces.
+        let transition = json!({"has_more": true, "next": "20",
+            "sort_type": "SORT_TYPE_FLOOR_DESC", "opaque": {"token": "unchanged"}});
+        pages.push(page(vec![item("transition", 2)], transition.clone()));
+        pages.push(more(vec![item("desc", 3)], "19"));
+        pages.push(last(vec![item("terminal", 4)]));
         let http = MockHttp::with_pages(pages);
         let (collector, _root) = setup(http.clone());
-        assert!(matches!(
-            collect(&collector, CollectionMode::Full).await,
-            Err(PluginFailure::InvalidResponse)
-        ));
+        let archive = collect(&collector, CollectionMode::Full).await.unwrap();
+        assert_eq!(archive.collection_state, CollectionState::Complete);
         assert_eq!(
-            latest_archive(&collector).collection_state,
-            CollectionState::Partial
+            archive.comments.len(),
+            if first_page_transition { 3 } else { 4 }
         );
-        assert!(!collector.root.join("frontiers").exists());
+        let requests = http.requests();
+        let transition_index = usize::from(!first_page_transition);
+        assert_eq!(requests[0].body["cursor"]["sort_type"], "SORT_TYPE_HOT");
+        let mut expected = transition;
+        expected["size"] = json!(20);
+        assert_eq!(requests[transition_index + 1].body["cursor"], expected);
+        assert_eq!(
+            requests[transition_index + 2].body["cursor"]["sort_type"],
+            "SORT_TYPE_FLOOR_DESC"
+        );
+        assert_eq!(frontier(&collector).len(), archive.comments.len());
         http.assert_drained();
     }
 }
 
 #[tokio::test]
-async fn reply_sort_flip_cannot_be_committed_as_a_complete_scan() {
-    for child in [false, true] {
+async fn unexpected_reply_sort_changes_cannot_be_committed_as_a_complete_scan() {
+    for (child, mode, request_sort, response_sort) in [
+        (
+            true,
+            CollectionMode::Full,
+            "SORT_TYPE_FLOOR_ASC",
+            "SORT_TYPE_FLOOR_DESC",
+        ),
+        (
+            false,
+            CollectionMode::Full,
+            "SORT_TYPE_HOT",
+            "SORT_TYPE_NEW",
+        ),
+        (
+            false,
+            CollectionMode::Full,
+            "SORT_TYPE_FLOOR_DESC",
+            "SORT_TYPE_HOT",
+        ),
+        (
+            false,
+            CollectionMode::Incremental,
+            "SORT_TYPE_FLOOR_DESC",
+            "SORT_TYPE_HOT",
+        ),
+    ] {
         let mut parent = item("parent", 1);
         parent["reply_stat"]["reply_count"] = json!(1);
         let wrong_sort = page(
             vec![item("reply", 2)],
-            json!({"has_more": false, "next": "", "sort_type": "SORT_TYPE_FLOOR_DESC"}),
+            json!({"has_more": false, "next": "", "sort_type": response_sort}),
         );
         let pages = if child {
             vec![last(vec![parent]), wrong_sort]
+        } else if mode == CollectionMode::Full && request_sort == "SORT_TYPE_FLOOR_DESC" {
+            vec![
+                page(
+                    vec![item("transition", 1)],
+                    json!({"has_more": true, "next": "20", "sort_type": request_sort}),
+                ),
+                wrong_sort,
+            ]
         } else {
             vec![wrong_sort]
         };
         let http = MockHttp::with_pages(pages);
         let (collector, _root) = setup(http.clone());
         assert!(matches!(
-            collect(&collector, CollectionMode::Full).await,
+            collect(&collector, mode).await,
             Err(PluginFailure::InvalidResponse)
         ));
         assert_eq!(
@@ -1526,4 +1717,59 @@ fn next_collection_reports_first_run_manual_queue_and_active_run_truthfully() {
         collector.monitor_status().unwrap().levels[0].next_collect_at,
         None
     );
+}
+
+#[test]
+fn displayed_full_deadline_tracks_settings_and_survives_restart() {
+    let http = MockHttp::with_pages([]);
+    let (collector, _root) = setup(http.clone());
+    let mut config = options();
+    config.enabled = true;
+    config.level_ids = vec![LEVEL.into()];
+    collector.configure_monitor(config.clone()).unwrap();
+    collector.monitor_status().unwrap();
+    let timestamp = monitor::now();
+    let full_success = timestamp - config.full_interval_secs as u64 + 60;
+    collector
+        .record_full_success(LEVEL, timestamp - 10, "fixture")
+        .unwrap();
+    let mut state = collector.monitor.lock().unwrap().statuses[LEVEL].clone();
+    state.last_full_success_at = full_success;
+    state.last_attempt_at = timestamp - 10;
+    collector
+        .monitor
+        .lock()
+        .unwrap()
+        .statuses
+        .insert(LEVEL.into(), state.clone());
+    fs::write(
+        collector.root.join("monitor-state.json"),
+        serde_json::to_vec(&vec![state.clone()]).unwrap(),
+    )
+    .unwrap();
+    assert_eq!(
+        collector.monitor_status().unwrap().levels[0].next_collect_at,
+        Some(timestamp + 60)
+    );
+    let restarted = CommentCollector::new(collector.root.clone(), http).unwrap();
+    assert_eq!(
+        restarted.monitor_status().unwrap().levels[0].next_collect_at,
+        Some(timestamp + 60)
+    );
+    config.full_interval_secs += 300;
+    restarted.configure_monitor(config.clone()).unwrap();
+    assert_eq!(
+        restarted.monitor_status().unwrap().levels[0].next_collect_at,
+        Some(timestamp + 360)
+    );
+    config.full_interval_secs -= 600;
+    restarted.configure_monitor(config.clone()).unwrap();
+    assert_eq!(
+        due_mode(&config, &state, timestamp),
+        Some(CollectionMode::Full)
+    );
+    let displayed = restarted.monitor_status().unwrap().levels[0]
+        .next_collect_at
+        .unwrap();
+    assert!(displayed >= timestamp && displayed <= monitor::now());
 }
